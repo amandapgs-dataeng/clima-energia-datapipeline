@@ -9,7 +9,7 @@ resource "databricks_cluster" "main" {
   spark_version           = data.databricks_spark_version.latest_lts.id
   node_type_id            = "Standard_DC4as_v5"
   autotermination_minutes = 20
-  num_workers              = 0
+  num_workers             = 0
   data_security_mode      = "SINGLE_USER"
   single_user_name        = data.databricks_current_user.me.user_name
 

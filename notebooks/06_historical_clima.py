@@ -6,6 +6,8 @@ from datetime import datetime, timedelta, timezone
 
 dbutils.widgets.text("data_referencia", "")
 data_param = dbutils.widgets.get("data_referencia")
+dbutils.widgets.text("catalog", "clima_energia_dev")
+catalog = dbutils.widgets.get("catalog")
 
 if data_param == "":
     data_referencia = datetime.now()
@@ -58,7 +60,7 @@ record = [{
 }]
 
 df = spark.createDataFrame(record)
-df.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable("clima_energia.bronze.historico_observado")
+df.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable(f"{catalog}.bronze.historico_observado")
 
 audit_record = [{
     "pipeline_name": "06_historical_clima",
@@ -67,6 +69,6 @@ audit_record = [{
     "status": "success",
     "linhas_gravadas": df.count()
 }]
-spark.createDataFrame(audit_record).write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable("clima_energia.bronze._audit_log")
+spark.createDataFrame(audit_record).write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable(f"{catalog}.bronze._audit_log")
 
 print(f"Gravado com sucesso: {start_date} até {end_date}")

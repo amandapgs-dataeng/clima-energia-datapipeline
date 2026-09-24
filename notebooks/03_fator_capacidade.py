@@ -6,6 +6,8 @@ from pyspark.sql.functions import col, lit, upper
 
 dbutils.widgets.text("data_referencia", "")
 data_param = dbutils.widgets.get("data_referencia")
+dbutils.widgets.text("catalog", "clima_energia_dev")
+catalog = dbutils.widgets.get("catalog")
 
 if data_param == "":
     data_referencia = datetime.now()
@@ -44,7 +46,7 @@ df_bronze = (
     .withColumn("source", lit("ons-fator-capacidade-monthly"))
 )
 
-df_bronze.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable("clima_energia.bronze.fator_capacidade")
+df_bronze.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable(f"{catalog}.bronze.fator_capacidade")
 
 linhas_gravadas = df_bronze.count()
 
@@ -55,6 +57,6 @@ audit_record = [{
     "status": "success",
     "linhas_gravadas": linhas_gravadas
 }]
-spark.createDataFrame(audit_record).write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable("clima_energia.bronze._audit_log")
+spark.createDataFrame(audit_record).write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable(f"{catalog}.bronze._audit_log")
 
 print(f"Gravado com sucesso: {linhas_gravadas} linhas para {ano}-{mes:02d}")
