@@ -32,30 +32,43 @@ resource "databricks_external_location" "gold" {
 }
 
 resource "databricks_catalog" "main" {
-  name         = "clima_energia"
-  comment      = "Catalog do projeto Clima + Energia"
+  for_each = var.environments
+
+  name         = "clima_energia_${each.key}"
+  comment      = "Catalog do projeto Clima + Energia (${each.key})"
   storage_root = databricks_external_location.bronze.url
 
   depends_on = [databricks_external_location.bronze]
 }
 
+moved {
+  from = databricks_catalog.main
+  to   = databricks_catalog.main["dev"]
+}
+
 resource "databricks_schema" "bronze" {
-  catalog_name = databricks_catalog.main.name
+  for_each = var.environments
+
+  catalog_name = databricks_catalog.main[each.key].name
   name         = "bronze"
-  storage_root = databricks_external_location.bronze.url
+  storage_root = "${databricks_external_location.bronze.url}${each.key}/"
   comment      = "Camada bronze - dados brutos"
 }
 
 resource "databricks_schema" "silver" {
-  catalog_name = databricks_catalog.main.name
+  for_each = var.environments
+
+  catalog_name = databricks_catalog.main[each.key].name
   name         = "silver"
-  storage_root = databricks_external_location.silver.url
+  storage_root = "${databricks_external_location.silver.url}${each.key}/"
   comment      = "Camada silver - dados tratados"
 }
 
 resource "databricks_schema" "gold" {
-  catalog_name = databricks_catalog.main.name
+  for_each = var.environments
+
+  catalog_name = databricks_catalog.main[each.key].name
   name         = "gold"
-  storage_root = databricks_external_location.gold.url
+  storage_root = "${databricks_external_location.gold.url}${each.key}/"
   comment      = "Camada gold - dados agregados"
 }
