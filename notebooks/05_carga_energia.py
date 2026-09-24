@@ -1,28 +1,27 @@
 # Databricks notebook source
 # COMMAND ----------
 import requests
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pyspark.sql.functions import col, lit, to_date
 from functools import reduce
+
+from utils.date_helpers import anos_da_janela, janela_retroativa, resolver_data_referencia
+from utils.normalization_helpers import ID_SUBSISTEMA_ALVO
 
 dbutils.widgets.text("data_referencia", "")
 data_param = dbutils.widgets.get("data_referencia")
 dbutils.widgets.text("catalog", "clima_energia_dev")
 catalog = dbutils.widgets.get("catalog")
 
-if data_param == "":
-    data_referencia = datetime.now()
-else:
-    data_referencia = datetime.strptime(data_param, "%Y-%m-%d")
+data_referencia = resolver_data_referencia(data_param)
 
 janela_dias = 60
-data_fim = data_referencia
-data_inicio = data_referencia - timedelta(days=janela_dias)
+data_inicio, data_fim = janela_retroativa(data_referencia, janela_dias)
 
 print(f"Janela de reprocessamento: {data_inicio.strftime('%Y-%m-%d')} até {data_fim.strftime('%Y-%m-%d')}")
 
 # COMMAND ----------
-anos_necessarios = sorted(set([data_inicio.year, data_fim.year]))
+anos_necessarios = anos_da_janela(data_inicio, data_fim)
 
 frames = []
 for ano in anos_necessarios:
@@ -43,7 +42,7 @@ df_todos_anos = reduce(lambda a, b: a.unionByName(b), frames)
 
 # COMMAND ----------
 df_filtrado = df_todos_anos.filter(
-    (col("id_subsistema") == "NE") &
+    (col("id_subsistema") == ID_SUBSISTEMA_ALVO) &
     (to_date(col("din_instante")) >= data_inicio.strftime("%Y-%m-%d")) &
     (to_date(col("din_instante")) <= data_fim.strftime("%Y-%m-%d"))
 )

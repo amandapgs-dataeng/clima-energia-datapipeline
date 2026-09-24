@@ -1,22 +1,19 @@
 # Databricks notebook source
 # COMMAND ----------
 import requests
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pyspark.sql.functions import col, lit, upper
+
+from utils.date_helpers import mes_anterior_fechado, resolver_data_referencia
+from utils.normalization_helpers import SUBSISTEMA_ALVO
 
 dbutils.widgets.text("data_referencia", "")
 data_param = dbutils.widgets.get("data_referencia")
 dbutils.widgets.text("catalog", "clima_energia_dev")
 catalog = dbutils.widgets.get("catalog")
 
-if data_param == "":
-    data_referencia = datetime.now()
-else:
-    data_referencia = datetime.strptime(data_param, "%Y-%m-%d")
-
-mes_anterior = data_referencia.replace(day=1) - timedelta(days=1)
-ano = mes_anterior.year
-mes = mes_anterior.month
+data_referencia = resolver_data_referencia(data_param)
+ano, mes = mes_anterior_fechado(data_referencia)
 
 print(f"Executando para o mês fechado: {ano}-{mes:02d}")
 
@@ -33,7 +30,7 @@ with open(local_path, "wb") as f:
 df_mes = spark.read.parquet(f"file://{local_path}")
 
 # COMMAND ----------
-df_filtrado = df_mes.filter(upper(col("nom_subsistema")).contains("NORDESTE"))
+df_filtrado = df_mes.filter(upper(col("nom_subsistema")).contains(SUBSISTEMA_ALVO))
 
 print(f"Linhas após filtro: {df_filtrado.count()}")
 

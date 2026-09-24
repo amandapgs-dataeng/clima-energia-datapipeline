@@ -1,18 +1,17 @@
 # Databricks notebook source
 # COMMAND ----------
 import requests
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pyspark.sql.functions import lit
+
+from utils.date_helpers import resolver_data_referencia
 
 dbutils.widgets.text("data_referencia", "")
 data_param = dbutils.widgets.get("data_referencia")
 dbutils.widgets.text("catalog", "clima_energia_dev")
 catalog = dbutils.widgets.get("catalog")
 
-if data_param == "":
-    data_referencia = datetime.now() - timedelta(days=1)  # padrão: D-1
-else:
-    data_referencia = datetime.strptime(data_param, "%Y-%m-%d")
+data_referencia = resolver_data_referencia(data_param, dias_defasagem=1)  # padrão: D-1
 
 data_str = data_referencia.strftime("%Y_%m_%d")
 

@@ -125,11 +125,16 @@ resource "databricks_job" "pipeline_mensal" {
     pause_status           = each.value.schedule_paused ? "PAUSED" : "UNPAUSED"
   }
 
+  # Tasks em ordem alfabética de task_key: a API do Databricks devolve assim,
+  # e outra ordem gera diff perpétuo no plan.
   task {
-    task_key            = "geracao_usina"
+    task_key = "fator_capacidade"
+    depends_on {
+      task_key = "geracao_usina"
+    }
     existing_cluster_id = databricks_cluster.main.id
     notebook_task {
-      notebook_path = "notebooks/02_geracao_usina.py"
+      notebook_path = "notebooks/03_fator_capacidade.py"
       source        = "GIT"
       base_parameters = {
         catalog = databricks_catalog.main[each.key].name
@@ -140,13 +145,10 @@ resource "databricks_job" "pipeline_mensal" {
   }
 
   task {
-    task_key = "fator_capacidade"
-    depends_on {
-      task_key = "geracao_usina"
-    }
+    task_key            = "geracao_usina"
     existing_cluster_id = databricks_cluster.main.id
     notebook_task {
-      notebook_path = "notebooks/03_fator_capacidade.py"
+      notebook_path = "notebooks/02_geracao_usina.py"
       source        = "GIT"
       base_parameters = {
         catalog = databricks_catalog.main[each.key].name

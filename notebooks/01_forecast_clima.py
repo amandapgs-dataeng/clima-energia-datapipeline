@@ -2,17 +2,16 @@
 # COMMAND ----------
 import requests
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
+
+from utils.date_helpers import resolver_data_referencia
 
 dbutils.widgets.text("data_referencia", "")
 data_param = dbutils.widgets.get("data_referencia")
 dbutils.widgets.text("catalog", "clima_energia_dev")
 catalog = dbutils.widgets.get("catalog")
 
-if data_param == "":
-    data_referencia = datetime.now()
-else:
-    data_referencia = datetime.strptime(data_param, "%Y-%m-%d")
+data_referencia = resolver_data_referencia(data_param)
 
 print(f"Executando para: {data_referencia.strftime('%Y-%m-%d')}")
 

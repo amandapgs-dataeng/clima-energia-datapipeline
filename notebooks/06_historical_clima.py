@@ -2,20 +2,20 @@
 # COMMAND ----------
 import requests
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
+
+from utils.date_helpers import FORMATO_DATA, janela_historico, resolver_data_referencia
 
 dbutils.widgets.text("data_referencia", "")
 data_param = dbutils.widgets.get("data_referencia")
 dbutils.widgets.text("catalog", "clima_energia_dev")
 catalog = dbutils.widgets.get("catalog")
 
-if data_param == "":
-    data_referencia = datetime.now()
-else:
-    data_referencia = datetime.strptime(data_param, "%Y-%m-%d")
+data_referencia = resolver_data_referencia(data_param)
 
-end_date = (data_referencia - timedelta(days=10)).strftime("%Y-%m-%d")
-start_date = (data_referencia - timedelta(days=16)).strftime("%Y-%m-%d")
+inicio, fim = janela_historico(data_referencia)
+start_date = inicio.strftime(FORMATO_DATA)
+end_date = fim.strftime(FORMATO_DATA)
 
 print(f"Janela: {start_date} até {end_date}")
 
