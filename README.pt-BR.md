@@ -72,7 +72,7 @@ flowchart LR
 ## O que o profiling do dado revelou
 
 Antes de escrever qualquer transformação, a bronze foi perfilada
-([dicionário de dados](docs/dicionario_dados.md)). Alguns achados que definem a silver:
+([dicionário da bronze](docs/dicionario_bronze.md)). Alguns achados que definem a silver:
 
 - **O horário do ONS é local, mas vem rotulado como UTC.** A geração solar começa às 6h e
   termina às 17h, o que só é plausível em horário local. Tratar como UTC deslocaria em 3 horas
@@ -92,9 +92,10 @@ Antes de escrever qualquer transformação, a bronze foi perfilada
 infra/               Terraform: Azure + Databricks + Unity Catalog + jobs
   bootstrap/         Script, rodado uma vez, que cria o storage do state remoto
 notebooks/           Notebooks Databricks (ingestão)
+pipelines/silver/    Lakeflow Declarative Pipeline da camada silver
   utils/             Funções compartilhadas e testadas (datas, HTTP, logging, gravação na bronze)
-tests/               Testes com pytest (rodam sem Spark e sem credenciais)
-docs/                Dicionário de dados e decisões de desenho
+tests/               Testes com pytest (helpers sem Spark; transformações da silver em Spark local)
+docs/                Dicionários de dados (bronze, silver) e decisões de desenho
 migracoes/           Migrações de dados pontuais (SQL)
 ```
 
@@ -132,7 +133,8 @@ pytest
 - [x] Infraestrutura como código, ambientes dev/prod e acesso com privilégio mínimo
 - [x] CI/CD com portão de qualidade e promoção automática
 - [x] Ingestão na bronze (6 datasets, 2 fontes), profiling e dicionário de dados
-- [ ] Silver: deduplicação com histórico de versões, tipagem, vocabulário comum e checagens de qualidade
+- [x] Silver: 6 tabelas com deduplicação, histórico de versões, tipagem, vocabulário comum e
+  regras de qualidade ([dicionário da silver](docs/dicionario_silver.md))
 - [ ] Gold: métricas de negócio da geração eólica e solar no Nordeste
 - [ ] Dashboard
 
