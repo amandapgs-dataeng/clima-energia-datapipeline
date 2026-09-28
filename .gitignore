@@ -1,7 +1,17 @@
+# Terraform
 .terraform/
-terraform.tfstate
-terraform.tfstate.backup
+*.tfstate
+*.tfstate.*
 *.tfvars
-.DS_Store
+!*.tfvars.example
+
+# Databricks (extensão do VS Code)
+.databricks/
+
+# Python
 __pycache__/
 .pytest_cache/
+.venv/
+
+# Sistema
+.DS_Store

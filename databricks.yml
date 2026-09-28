@@ -1,9 +1,8 @@
-# This is a Declarative Automation Bundle definition for projetos.
-# The Databricks extension requires databricks.yml configuration file.
-# See https://docs.databricks.com/dev-tools/bundles/index.html for documentation.
-
+# Usado apenas pela extensão do Databricks no VS Code, para conectar o editor ao
+# workspace durante o desenvolvimento. O deploy da infraestrutura e dos jobs é feito
+# pelo Terraform (pasta infra/), não por este bundle.
 bundle:
-  name: projetos
+  name: clima-energia-datapipeline
 
 targets:
   dev:
@@ -11,9 +10,3 @@ targets:
     default: true
     workspace:
       host: https://adb-7405605318552122.2.azuredatabricks.net
-
-  ## Optionally, there could be 'staging' or 'prod' targets here.
-  #
-  # prod:
-  #   workspace:
-  #     host: https://adb-7405605318552122.2.azuredatabricks.net
