@@ -3,7 +3,7 @@ from datetime import date, datetime, timezone
 import pytest
 from pyspark.sql import functions as F
 
-from utilities.historico import COLUNAS_VERSAO, ddl, nomes, versoes_legiveis
+from utilities.historico import COLUNAS_VERSAO, ddl, nomes, propriedades_da_tabela, versoes_legiveis
 from utilities.vocabulario import (
     codigo_subsistema,
     hora_local_ons,
@@ -57,6 +57,11 @@ class TestVocabulario:
 class TestHistorico:
     def test_ddl(self):
         assert ddl([("a", "INT", "coluna a"), ("b", "DATE", "coluna b")]) == "a INT COMMENT 'coluna a',\nb DATE COMMENT 'coluna b'"
+
+    def test_habilita_timestamp_ntz_quando_o_schema_usa(self):
+        com_ntz = propriedades_da_tabela([("data_hora", "TIMESTAMP_NTZ", "x")], {"camada": "silver"})
+        assert com_ntz == {"camada": "silver", "delta.feature.timestampNtz": "supported"}
+        assert propriedades_da_tabela([("data", "DATE", "x")], {"camada": "silver"}) == {"camada": "silver"}
 
     def cdc(self, spark):
         # NE/25-09 publicado em 28/09 e revisado em 04/10; SE/25-09 nunca revisado.

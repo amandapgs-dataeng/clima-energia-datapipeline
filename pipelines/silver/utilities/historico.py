@@ -35,6 +35,16 @@ def nomes(colunas):
     return [nome for nome, _, _ in colunas]
 
 
+def propriedades_da_tabela(colunas, propriedades):
+    """Propriedades da tabela, com os recursos do Delta que o schema exige.
+
+    Colunas TIMESTAMP_NTZ exigem o recurso timestampNtz habilitado explicitamente.
+    """
+    if any(tipo.upper() == "TIMESTAMP_NTZ" for _, tipo, _ in colunas):
+        return {**propriedades, "delta.feature.timestampNtz": "supported"}
+    return dict(propriedades)
+
+
 def versoes_legiveis(historico_cdc: DataFrame, chave) -> DataFrame:
     """Histórico com nomes de negócio no lugar das colunas técnicas do CDC (__START_AT/__END_AT)."""
     tecnicas = {"__START_AT", "__END_AT", SEQUENCIA}
@@ -56,6 +66,7 @@ def declarar_tabelas(dp, spark, *, nome, origem, chave, colunas, descricao, prop
     `colunas`: colunas de dados como (nome, tipo, comentário), na ordem em que a view
     `origem` as produz, sem a coluna de sequência (adicionada aqui).
     """
+    propriedades = propriedades_da_tabela(colunas, propriedades)
     dp.create_streaming_table(
         name=nome,
         comment=f"{descricao}: versão atual",
