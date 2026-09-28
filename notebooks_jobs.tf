@@ -1,18 +1,22 @@
-resource "databricks_job" "pipeline_diario" {
-  for_each = var.environments
+# Jobs de ingestão: rodam uma vez só (não por ambiente), com o código da main,
+# e gravam na bronze única (clima_energia_bronze). Silver e gold de cada ambiente
+# terão seus próprios jobs.
+locals {
+  ingestao_git_branch = "main"
+}
 
-  name = "pipeline-diario-clima-energia-${each.key}"
+resource "databricks_job" "pipeline_diario" {
+  name = "ingestao-diaria-clima-energia"
 
   git_source {
     url      = "https://github.com/amandapgs-dataeng/clima-energia-datapipeline"
     provider = "gitHub"
-    branch   = each.value.git_branch
+    branch   = local.ingestao_git_branch
   }
 
   schedule {
     quartz_cron_expression = "0 0 21 * * ?"
     timezone_id            = "America/Fortaleza"
-    pause_status           = each.value.schedule_paused ? "PAUSED" : "UNPAUSED"
   }
 
   task {
@@ -22,7 +26,7 @@ resource "databricks_job" "pipeline_diario" {
       notebook_path = "notebooks/01_forecast_clima.py"
       source        = "GIT"
       base_parameters = {
-        catalog = databricks_catalog.main[each.key].name
+        catalog = databricks_catalog.bronze.name
       }
     }
     max_retries               = 2
@@ -39,7 +43,7 @@ resource "databricks_job" "pipeline_diario" {
       notebook_path = "notebooks/04_previsao_programado.py"
       source        = "GIT"
       base_parameters = {
-        catalog = databricks_catalog.main[each.key].name
+        catalog = databricks_catalog.bronze.name
       }
     }
     max_retries               = 2
@@ -54,20 +58,17 @@ resource "databricks_job" "pipeline_diario" {
 }
 
 resource "databricks_job" "pipeline_semanal" {
-  for_each = var.environments
-
-  name = "pipeline-semanal-clima-energia-${each.key}"
+  name = "ingestao-semanal-clima-energia"
 
   git_source {
     url      = "https://github.com/amandapgs-dataeng/clima-energia-datapipeline"
     provider = "gitHub"
-    branch   = each.value.git_branch
+    branch   = local.ingestao_git_branch
   }
 
   schedule {
     quartz_cron_expression = "0 0 21 ? * SUN"
     timezone_id            = "America/Fortaleza"
-    pause_status           = each.value.schedule_paused ? "PAUSED" : "UNPAUSED"
   }
 
   task {
@@ -77,7 +78,7 @@ resource "databricks_job" "pipeline_semanal" {
       notebook_path = "notebooks/05_carga_energia.py"
       source        = "GIT"
       base_parameters = {
-        catalog = databricks_catalog.main[each.key].name
+        catalog = databricks_catalog.bronze.name
       }
     }
     max_retries               = 2
@@ -94,7 +95,7 @@ resource "databricks_job" "pipeline_semanal" {
       notebook_path = "notebooks/06_historical_clima.py"
       source        = "GIT"
       base_parameters = {
-        catalog = databricks_catalog.main[each.key].name
+        catalog = databricks_catalog.bronze.name
       }
     }
     max_retries               = 2
@@ -109,20 +110,17 @@ resource "databricks_job" "pipeline_semanal" {
 }
 
 resource "databricks_job" "pipeline_mensal" {
-  for_each = var.environments
-
-  name = "pipeline-mensal-clima-energia-${each.key}"
+  name = "ingestao-mensal-clima-energia"
 
   git_source {
     url      = "https://github.com/amandapgs-dataeng/clima-energia-datapipeline"
     provider = "gitHub"
-    branch   = each.value.git_branch
+    branch   = local.ingestao_git_branch
   }
 
   schedule {
     quartz_cron_expression = "0 0 21 2 * ?"
     timezone_id            = "America/Fortaleza"
-    pause_status           = each.value.schedule_paused ? "PAUSED" : "UNPAUSED"
   }
 
   # Tasks em ordem alfabética de task_key: a API do Databricks devolve assim,
@@ -137,7 +135,7 @@ resource "databricks_job" "pipeline_mensal" {
       notebook_path = "notebooks/03_fator_capacidade.py"
       source        = "GIT"
       base_parameters = {
-        catalog = databricks_catalog.main[each.key].name
+        catalog = databricks_catalog.bronze.name
       }
     }
     max_retries               = 2
@@ -151,7 +149,7 @@ resource "databricks_job" "pipeline_mensal" {
       notebook_path = "notebooks/02_geracao_usina.py"
       source        = "GIT"
       base_parameters = {
-        catalog = databricks_catalog.main[each.key].name
+        catalog = databricks_catalog.bronze.name
       }
     }
     max_retries               = 2
@@ -166,16 +164,16 @@ resource "databricks_job" "pipeline_mensal" {
 }
 
 moved {
-  from = databricks_job.pipeline_diario
-  to   = databricks_job.pipeline_diario["dev"]
+  from = databricks_job.pipeline_diario["prod"]
+  to   = databricks_job.pipeline_diario
 }
 
 moved {
-  from = databricks_job.pipeline_semanal
-  to   = databricks_job.pipeline_semanal["dev"]
+  from = databricks_job.pipeline_semanal["prod"]
+  to   = databricks_job.pipeline_semanal
 }
 
 moved {
-  from = databricks_job.pipeline_mensal
-  to   = databricks_job.pipeline_mensal["dev"]
+  from = databricks_job.pipeline_mensal["prod"]
+  to   = databricks_job.pipeline_mensal
 }
