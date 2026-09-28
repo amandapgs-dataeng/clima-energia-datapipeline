@@ -56,9 +56,9 @@ flowchart LR
 - **Ambientes com isolamento real.** Dev e prod têm catalogs separados para silver e gold. Dev
   roda com um service principal próprio, que só tem `SELECT` na bronze. Um bug em dev não
   consegue tocar o dado bruto.
-- **Bronze única e "burra".** O dado bruto é ingerido uma vez só, sem filtros, porque é o mesmo
-  para todos os ambientes. Os filtros de negócio (região, tipo de usina) ficam nas camadas
-  seguintes. Assim, um bug num filtro é corrigido e reprocessado sem baixar nada de novo.
+- **Bronze única e fiel à fonte.** O dado é ingerido uma vez, completo e sem regras de negócio,
+  e compartilhado pelos ambientes. Os filtros ficam na silver: corrigir um filtro exige só
+  reprocessar, sem nova ingestão.
 - **CI/CD com portão de qualidade.** Toda mudança passa por um PR para a `develop`, onde o CI
   roda os testes unitários, uma varredura de segredos (gitleaks) e `terraform fmt`/`validate`.
   Com o CI verde, um workflow promove a `develop` para a `main` protegida automaticamente. Os

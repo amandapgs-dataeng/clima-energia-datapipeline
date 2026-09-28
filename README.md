@@ -55,9 +55,9 @@ flowchart LR
 - **Environments with real isolation.** Dev and prod have separate catalogs for silver and gold.
   Dev runs as its own service principal with `SELECT`-only access to bronze, so a bug in dev
   cannot touch the raw data.
-- **One shared, "dumb" bronze.** Raw data is ingested once, with no filtering, because it is
-  the same for every environment. Business filters (region, plant type) live downstream, so a
-  bug in a filter can be fixed and reprocessed without re-downloading anything.
+- **A single, source-faithful bronze layer.** Data is ingested once, complete and free of
+  business rules, and shared across environments. Filters live in silver, so fixing one only
+  takes a reprocess, not a new ingestion.
 - **CI/CD with a quality gate.** Every change goes through a pull request to `develop`, where
   CI runs the unit tests, a secret scan (gitleaks) and `terraform fmt`/`validate`. When CI
   passes, a workflow promotes `develop` to the protected `main` branch automatically, and
