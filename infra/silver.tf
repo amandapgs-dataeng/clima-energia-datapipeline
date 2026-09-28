@@ -6,7 +6,14 @@ locals {
 
   # Tabelas da bronze que alimentam a silver: a atualização de qualquer uma dispara a silver de prod.
   tabelas_bronze_silver = [
-    "${databricks_catalog.bronze.name}.ons.carga_energia",
+    for tabela in [
+      "ons.carga_energia",
+      "ons.geracao_usina",
+      "ons.fator_capacidade",
+      "ons.previsao_programado_eolsol",
+      "open_meteo.previsao_bruta",
+      "open_meteo.historico_observado",
+    ] : "${databricks_catalog.bronze.name}.${tabela}"
   ]
 }
 
