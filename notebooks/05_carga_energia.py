@@ -1,74 +1,61 @@
 # Databricks notebook source
+# Carga de energia diária do Nordeste (ONS), reprocessando uma janela de 60 dias.
+
 # COMMAND ----------
-import requests
-from datetime import datetime, timezone
-from pyspark.sql.functions import col, lit, to_date
 from functools import reduce
 
-from utils.date_helpers import anos_da_janela, janela_retroativa, resolver_data_referencia
+from pyspark.sql import DataFrame
+from pyspark.sql.functions import col, to_date
+
+from utils.bronze_helpers import execucao_auditada, gravar_bronze, ler_parquet_remoto
+from utils.date_helpers import FORMATO_DATA, anos_da_janela, janela_retroativa, resolver_data_referencia
+from utils.fontes import url_ons
+from utils.http_helpers import ArquivoIndisponivel
+from utils.logging_helpers import obter_logger
 from utils.normalization_helpers import ID_SUBSISTEMA_ALVO
 
+PIPELINE = "05_carga_energia"
+FONTE = "ons-carga-energia-weekly"
+JANELA_DIAS = 60
+
 dbutils.widgets.text("data_referencia", "")
-data_param = dbutils.widgets.get("data_referencia")
 dbutils.widgets.text("catalog", "clima_energia_dev")
+
 catalog = dbutils.widgets.get("catalog")
-
-data_referencia = resolver_data_referencia(data_param)
-
-janela_dias = 60
-data_inicio, data_fim = janela_retroativa(data_referencia, janela_dias)
-
-print(f"Janela de reprocessamento: {data_inicio.strftime('%Y-%m-%d')} até {data_fim.strftime('%Y-%m-%d')}")
+data_referencia = resolver_data_referencia(dbutils.widgets.get("data_referencia"))
+logger = obter_logger(PIPELINE)
 
 # COMMAND ----------
-anos_necessarios = anos_da_janela(data_inicio, data_fim)
+def ler_carga_dos_anos(anos, ano_corrente):
+    """Lê o arquivo anual de cada ano da janela.
 
-frames = []
-for ano in anos_necessarios:
-    url = f"https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/carga_energia_di/CARGA_ENERGIA_{ano}.parquet"
-    local_path = f"/tmp/carga_energia_{ano}.parquet"
-    try:
-        resp = requests.get(url)
-        resp.raise_for_status()
-        with open(local_path, "wb") as f:
-            f.write(resp.content)
-        df_ano = spark.read.parquet(f"file://{local_path}")
-        frames.append(df_ano)
-        print(f"Ano {ano}: baixado com sucesso")
-    except Exception as e:
-        print(f"Falha ao baixar ano {ano}: {e}")
+    Só o arquivo do ano corrente pode faltar (o ONS publica com atraso no início
+    do ano); qualquer outra falha interrompe o job.
+    """
+    frames = []
+    for ano in anos:
+        arquivo = f"CARGA_ENERGIA_{ano}.parquet"
+        try:
+            frames.append(ler_parquet_remoto(spark, url_ons("carga_energia_di", arquivo), arquivo))
+        except ArquivoIndisponivel:
+            if ano != ano_corrente:
+                raise
+            logger.warning("Arquivo de %s ainda não publicado pelo ONS; seguindo sem ele", ano)
 
-df_todos_anos = reduce(lambda a, b: a.unionByName(b), frames)
-
-# COMMAND ----------
-df_filtrado = df_todos_anos.filter(
-    (col("id_subsistema") == ID_SUBSISTEMA_ALVO) &
-    (to_date(col("din_instante")) >= data_inicio.strftime("%Y-%m-%d")) &
-    (to_date(col("din_instante")) <= data_fim.strftime("%Y-%m-%d"))
-)
-
-print(f"Linhas após filtro: {df_filtrado.count()}")
+    if not frames:
+        raise RuntimeError(f"Nenhum arquivo de carga disponível para os anos {anos}")
+    return reduce(DataFrame.unionByName, frames)
 
 # COMMAND ----------
-ingestion_timestamp_val = datetime.now(timezone.utc)
+with execucao_auditada(spark, catalog, PIPELINE, data_referencia, logger) as execucao:
+    data_inicio, data_fim = janela_retroativa(data_referencia, JANELA_DIAS)
+    logger.info("Janela: %s até %s", data_inicio.strftime(FORMATO_DATA), data_fim.strftime(FORMATO_DATA))
 
-df_bronze = (
-    df_filtrado
-    .withColumn("ingestion_timestamp", lit(ingestion_timestamp_val))
-    .withColumn("source", lit("ons-carga-energia-weekly"))
-)
+    df_carga = ler_carga_dos_anos(anos_da_janela(data_inicio, data_fim), ano_corrente=data_fim.year)
 
-df_bronze.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable(f"{catalog}.bronze.carga_energia")
-
-linhas_gravadas = df_bronze.count()
-
-audit_record = [{
-    "pipeline_name": "05_carga_energia",
-    "data_referencia": data_referencia.strftime("%Y-%m-%d"),
-    "execution_timestamp": ingestion_timestamp_val,
-    "status": "success",
-    "linhas_gravadas": linhas_gravadas
-}]
-spark.createDataFrame(audit_record).write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable(f"{catalog}.bronze._audit_log")
-
-print(f"Gravado com sucesso: {linhas_gravadas} linhas")
+    dia = to_date(col("din_instante"))
+    df_filtrado = df_carga.filter(
+        (col("id_subsistema") == ID_SUBSISTEMA_ALVO)
+        & dia.between(data_inicio.strftime(FORMATO_DATA), data_fim.strftime(FORMATO_DATA))
+    )
+    execucao.linhas_gravadas = gravar_bronze(df_filtrado, f"{catalog}.bronze.carga_energia", FONTE, execucao.inicio)
