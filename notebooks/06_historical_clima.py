@@ -14,7 +14,7 @@ PIPELINE = "06_historical_clima"
 FONTE = "open-meteo-historical-weekly"
 
 dbutils.widgets.text("data_referencia", "")
-dbutils.widgets.text("catalog", "clima_energia_dev")
+dbutils.widgets.text("catalog", "clima_energia_bronze")
 
 catalog = dbutils.widgets.get("catalog")
 data_referencia = resolver_data_referencia(dbutils.widgets.get("data_referencia"))
@@ -34,4 +34,4 @@ with execucao_auditada(spark, catalog, PIPELINE, data_referencia, logger) as exe
         "end_date": data_fim.strftime(FORMATO_DATA),
         "raw_response": json.dumps(resposta),
     }])
-    execucao.linhas_gravadas = gravar_bronze(df, f"{catalog}.bronze.historico_observado", FONTE, execucao.inicio)
+    execucao.linhas_gravadas = gravar_bronze(df, f"{catalog}.open_meteo.historico_observado", FONTE, execucao.inicio)
