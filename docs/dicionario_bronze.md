@@ -1,4 +1,4 @@
-# Dicionário de dados — camada bronze
+# Dicionário de dados — bronze
 
 Catalog `clima_energia_bronze`. A bronze é uma cópia fiel das fontes: nenhum filtro ou regra de
 negócio é aplicado na ingestão. Tratamento, deduplicação e padronização acontecem na silver.

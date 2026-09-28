@@ -71,7 +71,7 @@ flowchart LR
 ## What the data profiling found
 
 Before writing any transformation, the bronze layer was profiled
-([data dictionary](docs/dicionario_dados.md)). Some findings that shape the silver layer:
+([bronze data dictionary](docs/dicionario_bronze.md)). Some findings that shape the silver layer:
 
 - **ONS timestamps are local time labeled as UTC.** Solar output starts at 06:00 and ends at
   17:00, which is only plausible in local time. Treating them as UTC would shift every join
@@ -91,9 +91,10 @@ Before writing any transformation, the bronze layer was profiled
 infra/               Terraform: Azure + Databricks + Unity Catalog + jobs
   bootstrap/         One-time script that creates the remote-state storage
 notebooks/           Databricks notebooks (ingestion)
+pipelines/silver/    Lakeflow Declarative Pipeline for the silver layer
   utils/             Shared, unit-tested helpers (dates, HTTP, logging, bronze writes)
-tests/               pytest suite (runs without Spark or credentials)
-docs/                Data dictionary and design decisions
+tests/               pytest suite (helpers without Spark; silver transformations on local Spark)
+docs/                Data dictionaries (bronze, silver) and design decisions
 migracoes/           One-off data migrations (SQL)
 ```
 
@@ -131,7 +132,8 @@ pytest
 - [x] Infrastructure as code, dev/prod environments, least-privilege access
 - [x] CI/CD with quality gate and automatic promotion
 - [x] Bronze ingestion (6 datasets, 2 providers), profiling and data dictionary
-- [ ] Silver: deduplication with version history, typing, shared vocabulary, data quality checks
+- [x] Silver: 6 tables with deduplication, version history, typing, a shared vocabulary and
+  data quality expectations ([silver data dictionary](docs/dicionario_silver.md))
 - [ ] Gold: business metrics for wind and solar in the Northeast
 - [ ] Dashboard
 
