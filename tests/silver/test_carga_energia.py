@@ -7,7 +7,9 @@ from utilities.carga_energia import (
     COLUNAS_VERSIONADAS,
     REGRAS_ALERTA,
     REGRAS_DESCARTE,
+    SEQUENCIA,
     padronizar_carga_energia,
+    versoes_legiveis,
 )
 
 COLUNAS_BRONZE = "id_subsistema string, nom_subsistema string, din_instante timestamp, val_cargaenergiamwmed double, ingestion_timestamp timestamp"
@@ -32,7 +34,7 @@ class TestPadronizar:
             ("subsistema", "string"),
             ("data", "date"),
             ("carga_mwmed", "double"),
-            ("ingestion_timestamp", "timestamp"),
+            ("ingerido_em", "timestamp"),
         ]
 
     def test_meia_noite_rotulada_utc_vira_o_proprio_dia(self, spark):
@@ -89,6 +91,33 @@ class TestContratoDoHistorico:
         assert set(COLUNAS_VERSIONADAS) <= set(colunas)
         assert not set(CHAVE) & set(COLUNAS_VERSIONADAS)
 
-    def test_ingestion_timestamp_nao_versiona(self):
+    def test_momento_da_ingestao_nao_versiona(self):
         # Se versionasse, cada releitura idêntica criaria uma versão nova no histórico.
-        assert "ingestion_timestamp" not in COLUNAS_VERSIONADAS
+        assert SEQUENCIA not in COLUNAS_VERSIONADAS
+
+
+COLUNAS_CDC = "id_subsistema string, subsistema string, data date, carga_mwmed double, ingerido_em timestamp, __START_AT timestamp, __END_AT timestamp"
+
+
+class TestVersoesLegiveis:
+    def historico(self, spark):
+        # NE em 25/09: publicado em 28/09 e revisado em 04/10. SE em 25/09: nunca revisado.
+        return spark.createDataFrame([
+            ("NE", "Nordeste", date(2026, 9, 25), 15109.0, datetime(2026, 9, 28, 14, 44), datetime(2026, 9, 28, 14, 43), datetime(2026, 10, 4, 21, 5)),
+            ("NE", "Nordeste", date(2026, 9, 25), 15187.4, datetime(2026, 10, 4, 21, 5), datetime(2026, 10, 4, 21, 5), None),
+            ("SE", "Sudeste/Centro-Oeste", date(2026, 9, 25), 46000.0, datetime(2026, 9, 28, 14, 44), datetime(2026, 9, 28, 14, 43), None),
+        ], COLUNAS_CDC)
+
+    def test_sem_colunas_tecnicas_do_cdc(self, spark):
+        colunas = versoes_legiveis(self.historico(spark)).columns
+        assert not [c for c in colunas if c.startswith("__")]
+        assert {"vigente_desde", "vigente_ate", "versao_atual", "numero_versao", "confirmado_em"} <= set(colunas)
+
+    def test_numera_as_versoes_e_marca_a_atual(self, spark):
+        linhas = versoes_legiveis(self.historico(spark)).filter("id_subsistema = 'NE'").orderBy("numero_versao").collect()
+        assert [(l.numero_versao, l.carga_mwmed, l.versao_atual) for l in linhas] == [(1, 15109.0, False), (2, 15187.4, True)]
+        assert linhas[0].vigente_ate == linhas[1].vigente_desde
+
+    def test_valor_nunca_revisado_tem_uma_versao_atual(self, spark):
+        linha = versoes_legiveis(self.historico(spark)).filter("id_subsistema = 'SE'").first()
+        assert (linha.numero_versao, linha.versao_atual, linha.vigente_ate) == (1, True, None)
