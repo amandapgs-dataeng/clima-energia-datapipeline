@@ -10,7 +10,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["notebooks"]
+pythonpath = ["notebooks", "pipelines/silver"]
 testpaths = ["tests"]
 
 # managed by databricks environments setup-local — do not edit
