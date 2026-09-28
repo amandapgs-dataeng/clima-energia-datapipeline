@@ -23,4 +23,11 @@ resource "databricks_grants" "catalog_dev" {
     principal  = databricks_service_principal.dev.application_id
     privileges = ["ALL_PRIVILEGES"]
   }
+
+  # As tabelas de dev pertencem ao service principal (quem as cria); ser dona do catalog
+  # não dá leitura sobre elas. A desenvolvedora lê dev para validar as mudanças.
+  grant {
+    principal  = data.databricks_current_user.me.user_name
+    privileges = ["USE_CATALOG", "USE_SCHEMA", "SELECT"]
+  }
 }
