@@ -72,6 +72,16 @@ resource "databricks_pipeline" "silver" {
   depends_on = [databricks_grants.bronze, databricks_grants.catalog_dev, databricks_permissions.codigo_dev]
 }
 
+# O job de dev roda como o service principal e precisa poder disparar o pipeline.
+resource "databricks_permissions" "pipeline_silver_dev" {
+  pipeline_id = databricks_pipeline.silver["dev"].id
+
+  access_control {
+    service_principal_name = databricks_service_principal.dev.application_id
+    permission_level       = "CAN_RUN"
+  }
+}
+
 resource "databricks_job" "silver" {
   for_each = var.environments
 
