@@ -1,11 +1,14 @@
 """Regras da silver de carga de energia (funções puras, testadas sem o Databricks)."""
-from pyspark.sql import DataFrame
+from pyspark.sql import DataFrame, Window
 from pyspark.sql import functions as F
 
 from utilities.vocabulario import codigo_subsistema, nome_subsistema
 
 # 1 linha = 1 subsistema x 1 dia.
 CHAVE = ["id_subsistema", "data"]
+
+# Coluna que ordena as versões: a mais recente ingerida vence.
+SEQUENCIA = "ingerido_em"
 
 # Só uma mudança nestas colunas cria uma nova versão no histórico: releituras idênticas
 # (retries, a janela semanal de 60 dias) não geram versões; revisões do ONS geram.
@@ -36,5 +39,20 @@ def padronizar_carga_energia(bronze: DataFrame) -> DataFrame:
         nome_subsistema(codigo).alias("subsistema"),
         F.to_date("din_instante").alias("data"),
         F.col("val_cargaenergiamwmed").cast("double").alias("carga_mwmed"),
-        F.col("ingestion_timestamp"),
+        F.col("ingestion_timestamp").alias(SEQUENCIA),
+    )
+
+
+def versoes_legiveis(historico_cdc: DataFrame) -> DataFrame:
+    """Histórico com nomes de negócio no lugar das colunas técnicas do CDC (__START_AT/__END_AT)."""
+    ordem = Window.partitionBy(*CHAVE).orderBy("__START_AT")
+    return historico_cdc.select(
+        *CHAVE,
+        "subsistema",
+        "carga_mwmed",
+        F.row_number().over(ordem).alias("numero_versao"),
+        F.col("__START_AT").alias("vigente_desde"),
+        F.col("__END_AT").alias("vigente_ate"),
+        F.col("__END_AT").isNull().alias("versao_atual"),
+        F.col(SEQUENCIA).alias("confirmado_em"),
     )
