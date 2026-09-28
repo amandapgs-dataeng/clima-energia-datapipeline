@@ -23,6 +23,12 @@ jobs:
         with:
           python-version: "3.12"
 
+      # Java para o Spark local dos testes da silver.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - name: Instalar dependências de teste
         run: pip install -r requirements-dev.txt
 
