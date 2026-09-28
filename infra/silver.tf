@@ -21,7 +21,7 @@ resource "databricks_repo" "codigo" {
   url          = local.repositorio_git
   git_provider = "gitHub"
   branch       = each.value.git_branch
-  path         = "/Workspace${databricks_directory.codigo.path}/${each.key}"
+  path         = "${databricks_directory.codigo.path}/${each.key}" # a API devolve sem o prefixo /Workspace
 }
 
 resource "databricks_permissions" "codigo_dev" {
