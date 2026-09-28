@@ -3,7 +3,8 @@
 # GRANT não restringe o dono. Uma identidade própria é o que garante, de fato, que dev
 # só lê a bronze e só escreve no próprio catalog.
 resource "databricks_service_principal" "dev" {
-  display_name = "sp-clima-energia-dev"
+  display_name     = "sp-clima-energia-dev"
+  workspace_access = true # necessário para ler o código na Git folder e rodar jobs
 }
 
 resource "databricks_grants" "bronze" {
