@@ -1,56 +1,25 @@
 # Databricks notebook source
-# COMMAND ----------
-import requests
-from datetime import datetime, timezone
-from pyspark.sql.functions import lit
+# Programação x previsão de geração eólica e solar (ONS) do dia D-1.
 
+# COMMAND ----------
+from utils.bronze_helpers import execucao_auditada, gravar_bronze, ler_parquet_remoto
 from utils.date_helpers import resolver_data_referencia
+from utils.fontes import url_ons
+from utils.logging_helpers import obter_logger
+
+PIPELINE = "04_previsao_programado"
+FONTE = "ons-previsao-programado-daily"
 
 dbutils.widgets.text("data_referencia", "")
-data_param = dbutils.widgets.get("data_referencia")
 dbutils.widgets.text("catalog", "clima_energia_dev")
+
 catalog = dbutils.widgets.get("catalog")
-
-data_referencia = resolver_data_referencia(data_param, dias_defasagem=1)  # padrão: D-1
-
-data_str = data_referencia.strftime("%Y_%m_%d")
-
-print(f"Executando para: {data_referencia.strftime('%Y-%m-%d')}")
+data_referencia = resolver_data_referencia(dbutils.widgets.get("data_referencia"), dias_defasagem=1)
+logger = obter_logger(PIPELINE)
 
 # COMMAND ----------
-url = f"https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/programacao_x_previsao/PROGRAMACAO_X_PREVISAO_{data_str}.parquet"
-local_path = f"/tmp/prog_{data_str}.parquet"
+with execucao_auditada(spark, catalog, PIPELINE, data_referencia, logger) as execucao:
+    arquivo = f"PROGRAMACAO_X_PREVISAO_{data_referencia:%Y_%m_%d}.parquet"
+    df_dia = ler_parquet_remoto(spark, url_ons("programacao_x_previsao", arquivo), arquivo)
 
-resp = requests.get(url)
-resp.raise_for_status()
-
-with open(local_path, "wb") as f:
-    f.write(resp.content)
-
-df_dia = spark.read.parquet(f"file://{local_path}")
-
-print(f"Linhas encontradas: {df_dia.count()}")
-
-# COMMAND ----------
-ingestion_timestamp_val = datetime.now(timezone.utc)
-
-df_bronze = (
-    df_dia
-    .withColumn("ingestion_timestamp", lit(ingestion_timestamp_val))
-    .withColumn("source", lit("ons-previsao-programado-daily"))
-)
-
-df_bronze.write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable(f"{catalog}.bronze.previsao_programado_eolsol")
-
-linhas_gravadas = df_bronze.count()
-
-audit_record = [{
-    "pipeline_name": "04_previsao_programado",
-    "data_referencia": data_referencia.strftime("%Y-%m-%d"),
-    "execution_timestamp": ingestion_timestamp_val,
-    "status": "success",
-    "linhas_gravadas": linhas_gravadas
-}]
-spark.createDataFrame(audit_record).write.format("delta").mode("append").option("mergeSchema", "true").saveAsTable(f"{catalog}.bronze._audit_log")
-
-print(f"Gravado com sucesso: {linhas_gravadas} linhas para {data_referencia.strftime('%Y-%m-%d')}")
+    execucao.linhas_gravadas = gravar_bronze(df_dia, f"{catalog}.bronze.previsao_programado_eolsol", FONTE, execucao.inicio)
