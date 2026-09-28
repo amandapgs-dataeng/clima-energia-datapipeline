@@ -5,6 +5,7 @@ import pytest
 from utils.date_helpers import (
     agora_fortaleza,
     anos_da_janela,
+    data_prevista,
     janela_historico,
     janela_retroativa,
     mes_anterior_fechado,
@@ -52,6 +53,17 @@ class TestResolverDataReferencia:
     def test_formato_invalido_falha(self):
         with pytest.raises(ValueError):
             resolver_data_referencia("15/03/2026")
+
+
+class TestDataPrevista:
+    def test_padrao_e_o_dia_seguinte(self):
+        assert data_prevista(datetime(2026, 9, 28)) == datetime(2026, 9, 29)
+
+    def test_virada_de_ano(self):
+        assert data_prevista(datetime(2026, 12, 31)) == datetime(2027, 1, 1)
+
+    def test_horizonte_configuravel(self):
+        assert data_prevista(datetime(2026, 9, 28), horizonte_dias=3) == datetime(2026, 10, 1)
 
 
 class TestMesAnteriorFechado:
