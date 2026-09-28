@@ -74,7 +74,7 @@ def modalidade_operacao(coluna):
 def hora_local_ons(coluna):
     """Hora do ONS como horário local, sem fuso (TIMESTAMP_NTZ).
 
-    O ONS grava horário de Brasília rotulado como UTC (ver docs/dicionario_dados.md). Com a
+    O ONS grava horário de Brasília rotulado como UTC (ver docs/dicionario_bronze.md). Com a
     sessão em UTC, o cast devolve exatamente o relógio publicado, sem deslocamento.
     """
     return F.col(coluna).cast("timestamp_ntz")
