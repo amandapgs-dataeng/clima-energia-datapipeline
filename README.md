@@ -1,0 +1,143 @@
+# Weather × Renewable Energy — Brazil's Northeast
+
+[![CI](https://github.com/amandapgs-dataeng/clima-energia-datapipeline/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/amandapgs-dataeng/clima-energia-datapipeline/actions/workflows/ci.yml)
+![Azure Databricks](https://img.shields.io/badge/Azure%20Databricks-Unity%20Catalog-FF3621?logo=databricks&logoColor=white)
+![Terraform](https://img.shields.io/badge/IaC-Terraform-7B42BC?logo=terraform&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)
+
+🇧🇷 [Leia em português](README.pt-BR.md)
+
+End-to-end data engineering project that ingests **weather data** (Open-Meteo) and **power
+system data** from Brazil's grid operator (ONS) to study how weather drives **wind and solar
+generation in Brazil's Northeast** — the region that produces most of the country's wind power.
+
+Everything is code: infrastructure, permissions, jobs and the delivery pipeline are versioned,
+tested and promoted automatically.
+
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Sources
+        OM[Open-Meteo API<br/>forecast + observed weather]
+        ONS[ONS open data<br/>generation, capacity factor,<br/>load, dispatch schedule]
+    end
+
+    subgraph Databricks["Azure Databricks · Unity Catalog"]
+        B[(Bronze<br/>clima_energia_bronze<br/>single, raw, shared)]
+        subgraph DEV[clima_energia_dev]
+            SD[(Silver)] --> GD[(Gold)]
+        end
+        subgraph PROD[clima_energia_prod]
+            SP[(Silver)] --> GP[(Gold)]
+        end
+        B -- read-only --> SD
+        B --> SP
+    end
+
+    OM --> B
+    ONS --> B
+    GP --> D[Dashboard]
+```
+
+| Layer | Question it answers | Scope |
+|---|---|---|
+| **Bronze** | What did the source send? | One copy for all environments. Exact copy of the source, no business rules. |
+| **Silver** | Is the data reliable, clean and standardized? | Per environment. Deduplication, typing, a shared vocabulary across sources, quality checks. |
+| **Gold** | What does it mean for the business? | Per environment. Aggregations that answer the business questions. |
+
+## Engineering highlights
+
+- **Infrastructure as code, end to end.** Azure resource group, ADLS Gen2, Databricks workspace,
+  Unity Catalog (storage credential, external locations, catalogs, schemas, grants), jobs and a
+  budget alert are all Terraform. State lives in a remote Azure backend with locking,
+  versioning and soft delete.
+- **Environments with real isolation.** Dev and prod have separate catalogs for silver and gold.
+  Dev runs as its own service principal with `SELECT`-only access to bronze, so a bug in dev
+  cannot touch the raw data.
+- **One shared, "dumb" bronze.** Raw data is ingested once, with no filtering, because it is
+  the same for every environment. Business filters (region, plant type) live downstream, so a
+  bug in a filter can be fixed and reprocessed without re-downloading anything.
+- **CI/CD with a quality gate.** Every change goes through a pull request to `develop`, where
+  CI runs the unit tests, a secret scan (gitleaks) and `terraform fmt`/`validate`. When CI
+  passes, a workflow promotes `develop` to the protected `main` branch automatically, and
+  production jobs pull code from `main`.
+- **Defensive ingestion.** HTTP retries with exponential backoff and timeouts, structured
+  logging, and an audit log that records failures as well as successes. The job still fails
+  loudly and sends an alert.
+- **Cost control.** Jobs run on ephemeral single-node job clusters and a budget alert watches
+  spending (under US$ 50/month).
+
+## What the data profiling found
+
+Before writing any transformation, the bronze layer was profiled
+([data dictionary](docs/dicionario_dados.md)). Some findings that shape the silver layer:
+
+- **ONS timestamps are local time labeled as UTC.** Solar output starts at 06:00 and ends at
+  17:00, which is only plausible in local time. Treating them as UTC would shift every join
+  with weather data by 3 hours.
+- **The same concept has different names across datasets:** `EOLIELÉTRICA` vs `Eólica`,
+  `TIPO I` vs `Tipo I`.
+- **Some "duplicates" are not duplicates.** Hybrid wind+solar plants appear twice per hour.
+  Plants can share a regulatory code (`ceg`), and aggregated plants use `-` as a placeholder
+  code. The natural keys had to be discovered, not assumed.
+- **Re-ingestion is history, not noise.** Grid load is re-read over a rolling 60-day window
+  every week, so the ONS can revise past values. Silver keeps the version history.
+
+## Repository layout
+
+```
+.github/workflows/   CI (tests, gitleaks, terraform) and automatic promotion to main
+infra/               Terraform: Azure + Databricks + Unity Catalog + jobs
+  bootstrap/         One-time script that creates the remote-state storage
+notebooks/           Databricks notebooks (ingestion)
+  utils/             Shared, unit-tested helpers (dates, HTTP, logging, bronze writes)
+tests/               pytest suite (runs without Spark or credentials)
+docs/                Data dictionary and design decisions
+migracoes/           One-off data migrations (SQL)
+```
+
+## Delivery flow
+
+```mermaid
+flowchart LR
+    F[feature/*] -- PR + CI --> D[develop]
+    D -- CI green --> P{{promotion workflow}}
+    P -- auto PR + merge --> M[main]
+    M -- git source --> J[Databricks jobs]
+```
+
+## Running it
+
+Prerequisites: Azure CLI (logged in), Terraform ≥ 1.7, Python 3.12.
+
+```bash
+# 1. One time only: create the storage for the Terraform state
+./infra/bootstrap/criar_backend_state.sh
+
+# 2. Infrastructure
+cd infra
+cp terraform.tfvars.example terraform.tfvars   # fill in the alert e-mail
+terraform init
+terraform apply
+
+# 3. Tests
+pip install -r requirements-dev.txt
+pytest
+```
+
+## Roadmap
+
+- [x] Infrastructure as code, dev/prod environments, least-privilege access
+- [x] CI/CD with quality gate and automatic promotion
+- [x] Bronze ingestion (6 datasets, 2 providers), profiling and data dictionary
+- [ ] Silver: deduplication with version history, typing, shared vocabulary, data quality checks
+- [ ] Gold: business metrics for wind and solar in the Northeast
+- [ ] Dashboard
+
+## Conventions
+
+- Branches: `feature/*`, `fix/*`, `docs/*`, `chore/*` → PR to `develop`.
+- Commits follow [Conventional Commits](https://www.conventionalcommits.org/)
+  (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`, `test:`, `ci:`).
+- Code and docs are written in Portuguese; this README is bilingual.

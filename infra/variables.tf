@@ -20,3 +20,8 @@ variable "environments" {
     error_message = "Os ambientes devem ser 'dev' ou 'prod'."
   }
 }
+
+variable "email_alertas" {
+  description = "E-mail que recebe alertas de orçamento e de falha dos jobs"
+  type        = string
+}

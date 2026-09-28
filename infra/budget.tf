@@ -16,7 +16,7 @@ resource "azurerm_consumption_budget_subscription" "main" {
     threshold      = 50
     operator       = "GreaterThanOrEqualTo"
     threshold_type = "Actual"
-    contact_emails = ["amandapgs@hotmail.com"]
+    contact_emails = [var.email_alertas]
   }
 
   notification {
@@ -24,7 +24,7 @@ resource "azurerm_consumption_budget_subscription" "main" {
     threshold      = 80
     operator       = "GreaterThanOrEqualTo"
     threshold_type = "Actual"
-    contact_emails = ["amandapgs@hotmail.com"]
+    contact_emails = [var.email_alertas]
   }
 
   notification {
@@ -32,6 +32,6 @@ resource "azurerm_consumption_budget_subscription" "main" {
     threshold      = 100
     operator       = "GreaterThanOrEqualTo"
     threshold_type = "Actual"
-    contact_emails = ["amandapgs@hotmail.com"]
+    contact_emails = [var.email_alertas]
   }
 }

@@ -29,6 +29,29 @@ jobs:
       - name: Rodar testes
         run: pytest -v
 
+  terraform:
+    name: Terraform (fmt e validate)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.16.3"
+
+      - name: Formatação
+        run: terraform fmt -check -recursive
+
+      # Sem backend: valida a configuração sem credenciais nem acesso ao state.
+      - name: Inicializar
+        run: terraform init -backend=false -input=false
+
+      - name: Validar
+        run: terraform validate
+
   segredos:
     name: Varredura de segredos (gitleaks)
     runs-on: ubuntu-latest
