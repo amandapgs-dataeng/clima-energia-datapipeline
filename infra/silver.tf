@@ -115,6 +115,7 @@ resource "databricks_job" "silver" {
       pause_status = "UNPAUSED"
       table_update {
         table_names                    = local.tabelas_bronze_silver
+        condition                      = "ANY_UPDATED" # qualquer tabela da bronze atualizada dispara a silver
         wait_after_last_change_seconds = 300
       }
     }
