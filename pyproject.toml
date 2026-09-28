@@ -1,12 +1,17 @@
 [project]
-name = "projetos"
-version = "0.0.0"
+name = "clima-energia-datapipeline"
+version = "0.1.0"
+description = "Pipeline de dados de clima e energia renovável no Nordeste (Azure Databricks + Terraform)"
 requires-python = "==3.12.*"
 
 [dependency-groups]
 dev = [
     "databricks-connect~=18.0",
 ]
+
+[tool.pytest.ini_options]
+pythonpath = ["notebooks"]
+testpaths = ["tests"]
 
 # managed by databricks environments setup-local — do not edit
 [tool.uv]

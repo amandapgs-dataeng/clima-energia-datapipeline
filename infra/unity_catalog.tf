@@ -41,11 +41,6 @@ resource "databricks_catalog" "main" {
   depends_on = [databricks_external_location.bronze]
 }
 
-moved {
-  from = databricks_catalog.main
-  to   = databricks_catalog.main["dev"]
-}
-
 # Bronze única, compartilhada por dev e prod: cópia fiel das fontes, sem regra de negócio.
 # Só os jobs de ingestão escrevem aqui; silver e gold de cada ambiente apenas leem.
 resource "databricks_catalog" "bronze" {
@@ -71,16 +66,6 @@ resource "databricks_schema" "bronze_compartilhada" {
   name         = each.key
   storage_root = "${databricks_external_location.bronze.url}${each.key}/"
   comment      = each.value
-}
-
-# Schemas bronze antigos (um por ambiente, dentro de clima_energia_dev/prod): saem do
-# Terraform sem serem apagados, para os dados de prod serem migrados antes. Depois, drop manual.
-removed {
-  from = databricks_schema.bronze
-
-  lifecycle {
-    destroy = false
-  }
 }
 
 resource "databricks_schema" "silver" {
