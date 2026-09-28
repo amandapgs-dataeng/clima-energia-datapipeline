@@ -27,6 +27,11 @@ def resolver_data_referencia(data_param, hoje=None, dias_defasagem=0):
     return hoje - timedelta(days=dias_defasagem)
 
 
+def data_prevista(data_emissao, horizonte_dias=1):
+    """Dia que uma previsão emitida em `data_emissao` descreve (padrão: o dia seguinte)."""
+    return data_emissao + timedelta(days=horizonte_dias)
+
+
 def mes_anterior_fechado(data_referencia):
     """(ano, mês) do último mês completo antes de `data_referencia`."""
     ultimo_dia_mes_anterior = data_referencia.replace(day=1) - timedelta(days=1)
