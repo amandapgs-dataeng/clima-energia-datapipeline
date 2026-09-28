@@ -1,8 +1,11 @@
 name: CI
 
+# Só roda para a develop. A main recebe código apenas pela promoção automática,
+# cujo PR usa os checks do push na develop (mesmo commit). Assim, nada chega à
+# main sem ter passado pela develop.
 on:
   pull_request:
-    branches: [main, develop]
+    branches: [develop]
   push:
     branches: [develop]
 
