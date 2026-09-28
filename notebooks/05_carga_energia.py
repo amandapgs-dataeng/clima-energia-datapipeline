@@ -1,5 +1,5 @@
 # Databricks notebook source
-# Carga de energia diária do Nordeste (ONS), reprocessando uma janela de 60 dias.
+# Carga de energia diária (ONS, todos os subsistemas), reprocessando uma janela de 60 dias.
 
 # COMMAND ----------
 from functools import reduce
@@ -12,14 +12,13 @@ from utils.date_helpers import FORMATO_DATA, anos_da_janela, janela_retroativa, 
 from utils.fontes import url_ons
 from utils.http_helpers import ArquivoIndisponivel
 from utils.logging_helpers import obter_logger
-from utils.normalization_helpers import ID_SUBSISTEMA_ALVO
 
 PIPELINE = "05_carga_energia"
 FONTE = "ons-carga-energia-weekly"
 JANELA_DIAS = 60
 
 dbutils.widgets.text("data_referencia", "")
-dbutils.widgets.text("catalog", "clima_energia_dev")
+dbutils.widgets.text("catalog", "clima_energia_bronze")
 
 catalog = dbutils.widgets.get("catalog")
 data_referencia = resolver_data_referencia(dbutils.widgets.get("data_referencia"))
@@ -53,9 +52,8 @@ with execucao_auditada(spark, catalog, PIPELINE, data_referencia, logger) as exe
 
     df_carga = ler_carga_dos_anos(anos_da_janela(data_inicio, data_fim), ano_corrente=data_fim.year)
 
-    dia = to_date(col("din_instante"))
-    df_filtrado = df_carga.filter(
-        (col("id_subsistema") == ID_SUBSISTEMA_ALVO)
-        & dia.between(data_inicio.strftime(FORMATO_DATA), data_fim.strftime(FORMATO_DATA))
+    # Recorte só de coleta (quais dias reprocessar); nenhum filtro de negócio na bronze.
+    df_janela = df_carga.filter(
+        to_date(col("din_instante")).between(data_inicio.strftime(FORMATO_DATA), data_fim.strftime(FORMATO_DATA))
     )
-    execucao.linhas_gravadas = gravar_bronze(df_filtrado, f"{catalog}.bronze.carga_energia", FONTE, execucao.inicio)
+    execucao.linhas_gravadas = gravar_bronze(df_janela, f"{catalog}.ons.carga_energia", FONTE, execucao.inicio)

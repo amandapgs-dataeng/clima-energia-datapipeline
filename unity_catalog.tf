@@ -46,13 +46,41 @@ moved {
   to   = databricks_catalog.main["dev"]
 }
 
-resource "databricks_schema" "bronze" {
-  for_each = var.environments
+# Bronze única, compartilhada por dev e prod: cópia fiel das fontes, sem regra de negócio.
+# Só os jobs de ingestão escrevem aqui; silver e gold de cada ambiente apenas leem.
+resource "databricks_catalog" "bronze" {
+  name         = "clima_energia_bronze"
+  comment      = "Camada bronze única (dados brutos das fontes), compartilhada entre ambientes"
+  storage_root = databricks_external_location.bronze.url
 
-  catalog_name = databricks_catalog.main[each.key].name
-  name         = "bronze"
+  depends_on = [databricks_external_location.bronze]
+}
+
+locals {
+  schemas_bronze = {
+    ons        = "Dados brutos do ONS (arquivos parquet de dados abertos)"
+    open_meteo = "Respostas brutas da API do Open-Meteo"
+    controle   = "Controle da ingestão (log de auditoria)"
+  }
+}
+
+resource "databricks_schema" "bronze_compartilhada" {
+  for_each = local.schemas_bronze
+
+  catalog_name = databricks_catalog.bronze.name
+  name         = each.key
   storage_root = "${databricks_external_location.bronze.url}${each.key}/"
-  comment      = "Camada bronze - dados brutos"
+  comment      = each.value
+}
+
+# Schemas bronze antigos (um por ambiente, dentro de clima_energia_dev/prod): saem do
+# Terraform sem serem apagados, para os dados de prod serem migrados antes. Depois, drop manual.
+removed {
+  from = databricks_schema.bronze
+
+  lifecycle {
+    destroy = false
+  }
 }
 
 resource "databricks_schema" "silver" {

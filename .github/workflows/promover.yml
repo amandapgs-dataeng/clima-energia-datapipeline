@@ -1,0 +1,69 @@
+name: Promover develop para main
+
+# Quando o CI passa num push para a develop (ex.: merge de uma feature), abre o PR
+# develop -> main, faz o merge e sincroniza a develop com a main.
+# O PR passa pela mesma proteção da main: os checks exigidos são os do CI que
+# acabou de rodar nesse mesmo commit.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [develop]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: promover-main
+  cancel-in-progress: false
+
+jobs:
+  promover:
+    name: Promover para main
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      SHA_TESTADO: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: develop
+          fetch-depth: 0
+
+      - name: Verificar se há algo a promover
+        id: verificar
+        run: |
+          if [ "$(git rev-parse origin/develop)" != "$SHA_TESTADO" ]; then
+            echo "A develop avançou depois deste CI; a próxima execução promove."
+            echo "promover=false" >> "$GITHUB_OUTPUT"
+          elif git merge-base --is-ancestor origin/develop origin/main; then
+            echo "A main já contém a develop."
+            echo "promover=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "promover=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Abrir o PR develop -> main
+        if: steps.verificar.outputs.promover == 'true'
+        run: |
+          PR=$(gh pr list --base main --head develop --state open --json number --jq '.[0].number')
+          if [ -z "$PR" ]; then
+            gh pr create --base main --head develop \
+              --title "Promoção automática: develop → main" \
+              --body "Aberto automaticamente após o CI passar no commit $SHA_TESTADO da develop."
+            PR=$(gh pr list --base main --head develop --state open --json number --jq '.[0].number')
+          fi
+          echo "PR=$PR" >> "$GITHUB_ENV"
+
+      - name: Fazer o merge (merge commit, só se a develop ainda for o commit testado)
+        if: steps.verificar.outputs.promover == 'true'
+        run: gh pr merge "$PR" --merge --match-head-commit "$SHA_TESTADO"
+
+      - name: Sincronizar a develop com a main
+        if: steps.verificar.outputs.promover == 'true'
+        run: |
+          git fetch origin main
+          git merge --ff-only origin/main
+          git push origin HEAD:develop

@@ -13,6 +13,7 @@ from utils.date_helpers import FORMATO_DATA
 from utils.http_helpers import baixar_arquivo
 
 TAMANHO_MAX_ERRO = 1000
+TABELA_AUDITORIA = "controle._audit_log"
 
 
 @dataclass
@@ -61,7 +62,7 @@ def _registrar_auditoria(spark, catalog, pipeline, data_referencia, execucao, st
         .write.format("delta")
         .mode("append")
         .option("mergeSchema", "true")
-        .saveAsTable(f"{catalog}.bronze._audit_log")
+        .saveAsTable(f"{catalog}.{TABELA_AUDITORIA}")
     )
 
 

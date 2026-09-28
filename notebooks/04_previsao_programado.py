@@ -11,7 +11,7 @@ PIPELINE = "04_previsao_programado"
 FONTE = "ons-previsao-programado-daily"
 
 dbutils.widgets.text("data_referencia", "")
-dbutils.widgets.text("catalog", "clima_energia_dev")
+dbutils.widgets.text("catalog", "clima_energia_bronze")
 
 catalog = dbutils.widgets.get("catalog")
 data_referencia = resolver_data_referencia(dbutils.widgets.get("data_referencia"), dias_defasagem=1)
@@ -22,4 +22,4 @@ with execucao_auditada(spark, catalog, PIPELINE, data_referencia, logger) as exe
     arquivo = f"PROGRAMACAO_X_PREVISAO_{data_referencia:%Y_%m_%d}.parquet"
     df_dia = ler_parquet_remoto(spark, url_ons("programacao_x_previsao", arquivo), arquivo)
 
-    execucao.linhas_gravadas = gravar_bronze(df_dia, f"{catalog}.bronze.previsao_programado_eolsol", FONTE, execucao.inicio)
+    execucao.linhas_gravadas = gravar_bronze(df_dia, f"{catalog}.ons.previsao_programado_eolsol", FONTE, execucao.inicio)
