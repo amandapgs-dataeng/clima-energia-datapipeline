@@ -94,6 +94,7 @@ infra/               Terraform: Azure + Databricks + Unity Catalog + jobs
   bootstrap/         One-time script that creates the remote-state storage
 notebooks/           Databricks notebooks (ingestion)
 pipelines/silver/    Lakeflow Declarative Pipeline for the silver layer
+pipelines/gold/      Lakeflow Declarative Pipeline for the gold layer (business metrics)
   utils/             Shared, unit-tested helpers (dates, HTTP, logging, bronze writes)
 tests/               pytest suite (helpers without Spark; silver transformations on local Spark)
 docs/                Data dictionaries (bronze, silver) and design decisions
@@ -136,7 +137,7 @@ pytest
 - [x] Bronze ingestion (6 datasets, 2 providers), profiling and data dictionary
 - [x] Silver: 6 tables with deduplication, version history, typing, a shared vocabulary and
   data quality expectations ([silver data dictionary](docs/dicionario_silver.md))
-- [ ] Gold: business metrics for wind and solar in the Northeast
+- [x] Gold: 9 tables answering the business questions ([gold data dictionary](docs/dicionario_gold.md))
 - [ ] Dashboard
 
 ## Conventions
