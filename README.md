@@ -65,8 +65,10 @@ flowchart LR
 - **Defensive ingestion.** HTTP retries with exponential backoff and timeouts, structured
   logging, and an audit log that records failures as well as successes. The job still fails
   loudly and sends an alert.
-- **Cost control.** Jobs run on ephemeral single-node job clusters and a budget alert watches
-  spending (under US$ 50/month).
+- **Cost control.** Jobs run on ephemeral single-node job clusters, the silver runs on serverless
+  compute only when the bronze changes, and a monthly budget alert watches spending. In steady
+  state the project costs around R$ 10/day, about R$ 6 of which is the fixed cost of the NAT
+  gateway that secure cluster connectivity (no public IPs on clusters) requires.
 
 ## What the data profiling found
 
