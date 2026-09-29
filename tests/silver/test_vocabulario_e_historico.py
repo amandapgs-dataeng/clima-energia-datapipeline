@@ -3,7 +3,15 @@ from datetime import date, datetime, timezone
 import pytest
 from pyspark.sql import functions as F
 
-from utilities.historico import COLUNAS_VERSAO, ddl, nomes, propriedades_da_tabela, versoes_legiveis
+from utilities.padrao_silver import (
+    COLUNAS_VERSAO,
+    ddl,
+    marcar_regras_violadas,
+    nomes,
+    propriedades_da_tabela,
+    regras_nulo_reprova,
+    versoes_legiveis,
+)
 from utilities.vocabulario import (
     codigo_subsistema,
     hora_local_ons,
@@ -84,3 +92,27 @@ class TestHistorico:
     def test_valor_nunca_revisado(self, spark):
         linha = versoes_legiveis(self.cdc(spark), ["id_subsistema", "data"]).filter("id_subsistema = 'SE'").first()
         assert (linha.numero_versao, linha.versao_atual, linha.vigente_ate) == (1, True, None)
+
+
+class TestQuarentena:
+    REGRAS = {"chave_presente": "id IS NOT NULL", "valor_positivo": "valor > 0"}
+
+    def dados(self, spark):
+        return spark.createDataFrame([("a", 1.0), (None, 2.0), ("c", -1.0), (None, None)], "id string, valor double")
+
+    def test_lista_as_regras_violadas_por_registro(self, spark):
+        linhas = {l.id: l.regras_violadas for l in marcar_regras_violadas(self.dados(spark), self.REGRAS).collect() if l.id}
+        assert linhas == {"a": [], "c": ["valor_positivo"]}
+
+    def test_nulo_conta_como_violacao(self, spark):
+        # (None, None): "valor > 0" é nulo em SQL; na quarentena, conta como violada.
+        linha = marcar_regras_violadas(self.dados(spark), self.REGRAS).filter("id IS NULL AND valor IS NULL").first()
+        assert linha.regras_violadas == ["chave_presente", "valor_positivo"]
+
+    def test_descarte_e_quarentena_sao_complementares(self, spark):
+        df = marcar_regras_violadas(self.dados(spark), self.REGRAS)
+        aprovados = df
+        for expressao in regras_nulo_reprova(self.REGRAS).values():
+            aprovados = aprovados.filter(expressao)
+        em_quarentena = df.filter(F.size("regras_violadas") > 0)
+        assert aprovados.count() + em_quarentena.count() == df.count()

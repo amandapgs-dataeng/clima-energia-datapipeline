@@ -2,7 +2,7 @@
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
-from utilities.historico import SEQUENCIA
+from utilities.padrao_silver import SEQUENCIA, TabelaSilver
 from utilities.vocabulario import codigo_subsistema, nome_subsistema
 
 COLUNAS = [
@@ -33,3 +33,17 @@ def padronizar_carga_energia(bronze: DataFrame) -> DataFrame:
         F.col("val_cargaenergiamwmed").cast("double").alias("carga_mwmed"),
         F.col("ingestion_timestamp").alias(SEQUENCIA),
     )
+
+
+TABELA = TabelaSilver(
+    nome="carga_energia",
+    fonte="ons",
+    descricao="Carga de energia diária por subsistema",
+    tabelas_bronze=("ons.carga_energia",),
+    padronizar=padronizar_carga_energia,
+    colunas=COLUNAS,
+    chave=CHAVE,
+    regras_descarte=REGRAS_DESCARTE,
+    regras_alerta=REGRAS_ALERTA,
+    colunas_versionadas=COLUNAS_VERSIONADAS,
+)

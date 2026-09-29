@@ -12,6 +12,7 @@ locals {
       "ons.fator_capacidade",
       "ons.previsao_programado_eolsol",
       "open_meteo.previsao_bruta",
+      "open_meteo.previsao_historica_bruta",
       "open_meteo.historico_observado",
     ] : "${databricks_catalog.bronze.name}.${tabela}"
   ]
@@ -112,9 +113,7 @@ resource "databricks_job" "silver" {
   dynamic "trigger" {
     for_each = each.value.schedule_paused ? [] : [1]
     content {
-      # Pausado durante o reprocessamento de 29/09/2026: a bronze recebe o formato novo do clima
-      # (vários pontos) antes da silver que o entende. Reativado junto com a silver nova.
-      pause_status = "PAUSED"
+      pause_status = "UNPAUSED"
       table_update {
         table_names                    = local.tabelas_bronze_silver
         condition                      = "ANY_UPDATED" # qualquer tabela da bronze atualizada dispara a silver

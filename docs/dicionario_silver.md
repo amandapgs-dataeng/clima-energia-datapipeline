@@ -5,9 +5,10 @@ Catalogs `clima_energia_dev` e `clima_energia_prod`, schema `silver`. A silver �
 (nenhum recorte de região ou de fonte: isso é papel da gold).
 
 Construída com Lakeflow Declarative Pipelines (`pipelines/silver/`), um pipeline por ambiente,
-lendo a bronze única (`clima_energia_bronze`). Os tratamentos de cada fonte estão em
-`pipelines/silver/utilities/` e são testados em `tests/silver/`. As tabelas de colunas abaixo
-são geradas a partir dessas definições.
+lendo a bronze única (`clima_energia_bronze`). Cada fonte descreve a sua tabela numa definição
+(`TabelaSilver`: origem na bronze, tratamento, colunas, chave e regras de qualidade), reunidas em
+`pipelines/silver/utilities/catalogo.py`. O pipeline, os testes de contrato e este dicionário
+partem dessas definições; as tabelas de colunas abaixo são geradas a partir delas.
 
 ## Visão geral
 
@@ -17,8 +18,8 @@ são geradas a partir dessas definições.
 | `geracao_usina` | usina × hora | `data_hora`, `chave_usina` | sim | `ons.geracao_usina` |
 | `fator_capacidade` | usina/conjunto eólico ou solar × hora | `data_hora`, `id_ons` | sim | `ons.fator_capacidade` |
 | `previsao_programado` | usina eólica ou solar × meia hora | `data`, `patamar`, `codigo_usina` | sim | `ons.previsao_programado_eolsol` |
-| `clima_previsao` | dia de emissão × hora | `data_emissao`, `data_hora` | não (cada emissão é um fato novo) | `open_meteo.previsao_bruta` |
-| `clima_observado` | hora | `data_hora` | não (janelas sobrepostas só se deduplicam) | `open_meteo.historico_observado` |
+| `clima_previsao` | ponto × dia de emissão × hora | `ponto_id`, `data_emissao`, `data_hora` | não (cada emissão é um fato novo) | `open_meteo.previsao_bruta` e `open_meteo.previsao_historica_bruta` |
+| `clima_observado` | ponto × hora | `ponto_id`, `data_hora` | não (janelas sobrepostas só se deduplicam) | `open_meteo.historico_observado` |
 
 ## Padrão das tabelas
 
@@ -27,6 +28,7 @@ Para cada tabela `x`:
 | Objeto | Tipo | Para quê |
 |---|---|---|
 | `x` | streaming table (AUTO CDC, SCD tipo 1) | **Versão atual** de cada chave. É a tabela de consulta do dia a dia. |
+| `x_quarentena` | streaming table | Registros **descartados** pelas regras de qualidade, com a lista de regras que violaram. |
 | `x_versoes` | materialized view | **Histórico legível**: cada valor diferente publicado pela fonte é uma versão. |
 | `x_historico_cdc` | streaming table (AUTO CDC, SCD tipo 2) | Histórico **técnico**, de uso interno do pipeline (colunas `__START_AT`/`__END_AT`). |
 
@@ -37,6 +39,12 @@ Para cada tabela `x`:
 - **Processamento incremental**: cada execução lê só o que chegou de novo na bronze. Um
   *full refresh* (reconstrução completa) só é necessário quando a estrutura muda, e é seguro
   porque a bronze guarda todas as ingestões.
+
+Colunas de toda tabela `x_quarentena`: as mesmas de `x`, mais
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `regras_violadas` | ARRAY<STRING> | Regras de descarte que o registro violou |
 
 Colunas de toda tabela `x_versoes` (além das colunas de dados de `x`):
 
@@ -84,7 +92,8 @@ Cada tabela tem duas classes de regra (expectations do pipeline), com métricas 
 painel do pipeline:
 
 - **Descarte**: registros que quebram a estrutura (sem chave, subsistema desconhecido, sem o
-  valor principal) não entram na silver. Continuam na bronze.
+  valor principal) não entram na silver. Vão para a tabela `x_quarentena`, com as regras que
+  violaram, e continuam na bronze. Uma regra cujo resultado é nulo conta como violada.
 - **Alerta**: valores suspeitos, mas publicados pela fonte, entram e ficam sinalizados. A silver
   não corrige o dado por conta própria.
 
@@ -94,7 +103,8 @@ painel do pipeline:
 | `geracao_usina` | sem hora ou nome; subsistema desconhecido | tipo de usina desconhecido; geração < −10 MW |
 | `fator_capacidade` | sem hora ou `id_ons`; subsistema desconhecido | tipo diferente de Eólica/Solar; valor em texto não numérico; fator fora de −0,05 a 1 |
 | `previsao_programado` | sem data ou usina; patamar fora de 1 a 48 | valor em texto não numérico; valor negativo |
-| `clima_previsao`, `clima_observado` | sem hora | temperatura fora de 15 a 45 °C; umidade fora de 0 a 100%; radiação ou vento negativos |
+| `clima_previsao` | sem ponto, hora ou dia de emissão | temperatura fora de 5 a 48 °C; umidade fora de 0 a 100%; radiação ou vento a 100 m negativos |
+| `clima_observado` | sem ponto ou hora | as mesmas da previsão |
 
 ## Tabelas
 
@@ -192,15 +202,20 @@ Geração prevista e programada pelo ONS para cada usina eólica ou solar, a cad
 
 ### `clima_previsao`
 
-Previsão horária do tempo em Fortaleza. Cada resposta da API (um JSON por dia na bronze) vira
-24 linhas, uma por hora, com uma coluna por variável.
+Previsão horária do tempo em cada ponto de coleta: o centro das usinas eólicas e solares de cada
+estado do Nordeste e as capitais (ver o [dicionário da bronze](dicionario_bronze.md)). Cada
+resposta da API vira uma linha por ponto e hora, com uma coluna por variável.
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
-| `data_emissao` | DATE | Dia em que a previsão foi emitida (coletada) |
+| `ponto_id` | STRING | Ponto de coleta: centro das usinas de uma fonte num estado, ou uma capital |
+| `uf` | STRING | Sigla do estado do ponto |
+| `tipo_ponto` | STRING | eolica, solar ou capital |
+| `data_emissao` | DATE | Dia em que a previsão foi emitida |
 | `data_prevista` | DATE | Dia que a previsão descreve |
 | `horizonte_dias` | INT | Dias entre a emissão e o dia previsto (0 = o próprio dia) |
-| `data_hora` | TIMESTAMP_NTZ | Hora local de Fortaleza (sem fuso) |
+| `origem` | STRING | coleta_diaria ou previsoes_anteriores (reprocessamento via API de previsões anteriores) |
+| `data_hora` | TIMESTAMP_NTZ | Hora local do Nordeste, UTC-3 (sem fuso) |
 | `temperatura_c` | DOUBLE | Temperatura do ar a 2 m, em °C |
 | `sensacao_termica_c` | DOUBLE | Sensação térmica, em °C |
 | `umidade_relativa_pct` | DOUBLE | Umidade relativa a 2 m, em % |
@@ -215,9 +230,11 @@ Previsão horária do tempo em Fortaleza. Cada resposta da API (um JSON por dia 
 | `nuvens_baixas_pct` | DOUBLE | Cobertura de nuvens baixas, em % |
 | `nuvens_medias_pct` | DOUBLE | Cobertura de nuvens médias, em % |
 | `nuvens_altas_pct` | DOUBLE | Cobertura de nuvens altas, em % |
-| `vento_velocidade_kmh` | DOUBLE | Velocidade do vento a 10 m, em km/h |
-| `vento_direcao_graus` | DOUBLE | Direção do vento a 10 m, em graus |
-| `vento_rajada_kmh` | DOUBLE | Rajada de vento a 10 m, em km/h |
+| `vento_velocidade_10m_kmh` | DOUBLE | Velocidade do vento a 10 m, em km/h |
+| `vento_direcao_10m_graus` | DOUBLE | Direção do vento a 10 m, em graus |
+| `vento_rajada_10m_kmh` | DOUBLE | Rajada de vento a 10 m, em km/h |
+| `vento_velocidade_100m_kmh` | DOUBLE | Velocidade do vento a 100 m (altura aproximada do rotor), em km/h |
+| `vento_direcao_100m_graus` | DOUBLE | Direção do vento a 100 m, em graus |
 | `radiacao_solar_wm2` | DOUBLE | Radiação solar de onda curta, em W/m² |
 | `indice_uv` | DOUBLE | Índice UV |
 | `visibilidade_m` | DOUBLE | Visibilidade, em metros |
@@ -226,13 +243,51 @@ Previsão horária do tempo em Fortaleza. Cada resposta da API (um JSON por dia 
 | `longitude_grade` | DOUBLE | Longitude do ponto de grade usado pela API |
 | `ingerido_em` | TIMESTAMP | Quando o valor foi ingerido pela última vez (UTC) |
 
-- Até 28/09/2026 a coleta buscava o próprio dia (`horizonte_dias = 0`); a partir daí, o dia
-  seguinte (`horizonte_dias = 1`).
+- Duas origens: a **coleta diária** (emitida às 21h para o dia seguinte) e as **previsões
+  anteriores** (previsões D+1 de dias passados, carregadas no reprocessamento). Nas previsões
+  anteriores, `data_emissao` é a véspera de cada hora prevista.
+- Até 28/09/2026 a coleta diária buscava o próprio dia (`horizonte_dias = 0`) e só em Fortaleza;
+  essas linhas aparecem com `ponto_id = fortaleza`.
+- Nas previsões anteriores, `chuva_mm`, `nuvens_baixas/medias/altas_pct`, `indice_uv` e
+  `visibilidade_m` são nulos (a API não as fornece).
 
 ### `clima_observado`
 
-Tempo observado hora a hora em Fortaleza. Mesmas colunas de `clima_previsao` a partir de
-`data_hora` (variáveis, ponto de grade e `ingerido_em`), sem as colunas de emissão.
+Tempo observado hora a hora em cada ponto de coleta. Mesmas colunas de `clima_previsao`, sem as
+de emissão:
 
-- As janelas semanais da bronze podem se sobrepor; cada hora aparece uma vez, com o valor da
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `ponto_id` | STRING | Ponto de coleta: centro das usinas de uma fonte num estado, ou uma capital |
+| `uf` | STRING | Sigla do estado do ponto |
+| `tipo_ponto` | STRING | eolica, solar ou capital |
+| `data_hora` | TIMESTAMP_NTZ | Hora local do Nordeste, UTC-3 (sem fuso) |
+| `temperatura_c` | DOUBLE | Temperatura do ar a 2 m, em °C |
+| `sensacao_termica_c` | DOUBLE | Sensação térmica, em °C |
+| `umidade_relativa_pct` | DOUBLE | Umidade relativa a 2 m, em % |
+| `ponto_orvalho_c` | DOUBLE | Ponto de orvalho a 2 m, em °C |
+| `precipitacao_mm` | DOUBLE | Precipitação total na hora, em mm |
+| `chuva_mm` | DOUBLE | Chuva na hora, em mm |
+| `pancadas_mm` | DOUBLE | Pancadas de chuva na hora, em mm |
+| `codigo_tempo` | INT | Código de condição do tempo (padrão WMO) |
+| `pressao_nivel_mar_hpa` | DOUBLE | Pressão ao nível do mar, em hPa |
+| `pressao_superficie_hpa` | DOUBLE | Pressão na superfície, em hPa |
+| `cobertura_nuvens_pct` | DOUBLE | Cobertura total de nuvens, em % |
+| `nuvens_baixas_pct` | DOUBLE | Cobertura de nuvens baixas, em % |
+| `nuvens_medias_pct` | DOUBLE | Cobertura de nuvens médias, em % |
+| `nuvens_altas_pct` | DOUBLE | Cobertura de nuvens altas, em % |
+| `vento_velocidade_10m_kmh` | DOUBLE | Velocidade do vento a 10 m, em km/h |
+| `vento_direcao_10m_graus` | DOUBLE | Direção do vento a 10 m, em graus |
+| `vento_rajada_10m_kmh` | DOUBLE | Rajada de vento a 10 m, em km/h |
+| `vento_velocidade_100m_kmh` | DOUBLE | Velocidade do vento a 100 m (altura aproximada do rotor), em km/h |
+| `vento_direcao_100m_graus` | DOUBLE | Direção do vento a 100 m, em graus |
+| `radiacao_solar_wm2` | DOUBLE | Radiação solar de onda curta, em W/m² |
+| `indice_uv` | DOUBLE | Índice UV |
+| `visibilidade_m` | DOUBLE | Visibilidade, em metros |
+| `periodo_diurno` | BOOLEAN | Verdadeiro entre o nascer e o pôr do sol |
+| `latitude_grade` | DOUBLE | Latitude do ponto de grade usado pela API (o mais próximo do pedido) |
+| `longitude_grade` | DOUBLE | Longitude do ponto de grade usado pela API |
+| `ingerido_em` | TIMESTAMP | Quando o valor foi ingerido pela última vez (UTC) |
+
+- As janelas de coleta podem se sobrepor; cada ponto e hora aparece uma vez, com o valor da
   ingestão mais recente.
