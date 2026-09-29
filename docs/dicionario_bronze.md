@@ -14,8 +14,9 @@ os datasets mensais do ONS).
 | `ons.fator_capacidade` | Uso da capacidade instalada de usinas eólicas e solares | conjunto/usina × tipo × hora | `din_instante` + `nom_usina_conjunto` + `nom_tipousina` | mensal (mês fechado) |
 | `ons.carga_energia` | Consumo de energia por subsistema | subsistema × dia | `din_instante` + `id_subsistema` | semanal (janela de 60 dias) |
 | `ons.previsao_programado_eolsol` | Previsão e programação do ONS para usinas eólicas e solares | usina × dia × patamar de 30 min | `dat_programacao` + `num_patamar` + `cod_usinapdp` | diária (D-1) |
-| `open_meteo.previsao_bruta` | Previsão horária do tempo em Fortaleza | resposta da API (24 horas) | `data_referencia` + `ingestion_timestamp` | diária |
-| `open_meteo.historico_observado` | Tempo observado em Fortaleza | resposta da API (168 horas) | `start_date` + `ingestion_timestamp` | semanal |
+| `open_meteo.previsao_bruta` | Previsão horária do tempo, emitida às 21h para o dia seguinte | ponto × resposta da API (24 horas) | `ponto_id` + `data_referencia` + `ingestion_timestamp` | diária |
+| `open_meteo.previsao_historica_bruta` | Previsões D+1 de dias passados (reprocessamento) | ponto × resposta da API (até 1 mês) | `ponto_id` + `start_date` + `ingestion_timestamp` | sob demanda |
+| `open_meteo.historico_observado` | Tempo observado | ponto × resposta da API (até 1 mês) | `ponto_id` + `start_date` + `ingestion_timestamp` | semanal |
 | `controle._audit_log` | Execuções da ingestão (sucesso e falha) | execução de notebook | `pipeline_name` + `execution_timestamp` | a cada execução |
 
 Todas as tabelas de dados têm duas colunas de controle, preenchidas pela ingestão:
@@ -146,34 +147,68 @@ hora do dia. Arquivo diário; a ingestão baixa o dia anterior (D-1).
 - **Chave** única, sem duplicatas: cada dia chega uma vez.
 - Valores de 0 a ~1.100.
 
+### Pontos de coleta do clima
+
+Desde 29/09/2026, o clima é coletado em 15 pontos (`notebooks/utils/pontos_clima.py`), numa
+única chamada à API por período:
+
+- **12 pontos de usinas**: para cada estado do Nordeste e cada fonte (eólica, solar), o centro das
+  usinas ponderado pela capacidade instalada (`silver.fator_capacidade`, 08/2026). Juntos, cobrem
+  100% da capacidade eólica e solar do subsistema Nordeste.
+- **3 capitais**: Fortaleza, Recife e Salvador, para comparar clima e consumo.
+
+Antes de 29/09/2026, só Fortaleza era coletada, e as linhas não identificam o ponto.
+
 ### `open_meteo.previsao_bruta`
 
-Resposta completa da API de previsão do Open-Meteo para Fortaleza.
+Resposta completa da API de previsão do Open-Meteo, uma linha por ponto e dia de emissão.
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
 | `data_referencia` | string | Dia da **emissão** da previsão (dia em que o job rodou) |
 | `data_prevista` | string | Dia que a previsão descreve (a partir de 28/09/2026; ver decisões) |
 | `horizonte_dias` | long | Distância entre emissão e dia previsto (a partir de 28/09/2026) |
-| `latitude_requested`, `longitude_requested` | double | Ponto pedido (−3,72; −38,54) |
+| `ponto_id`, `uf`, `tipo_ponto` | string | Ponto de coleta (ver abaixo); nulo nas linhas anteriores a 29/09/2026, que eram de Fortaleza |
+| `latitude_requested`, `longitude_requested` | double | Coordenadas pedidas à API |
 | `raw_response` | string | JSON completo da API |
 
 - O JSON tem `hourly.time` (24 horas, horário de `America/Fortaleza`) e uma série por variável
-  (21 variáveis: temperatura, umidade, precipitação, nuvens, vento, radiação etc.).
+  (23 variáveis desde 29/09/2026: temperatura, umidade, precipitação, nuvens, vento a 10 m e a
+  100 m, radiação etc.; antes eram 21, sem o vento a 100 m).
 - Unidades: temperatura em °C, vento em km/h, radiação em W/m² (em `hourly_units`).
 - A API devolve o ponto de grade mais próximo (−3,76; −38,53), não exatamente o pedido.
 - Nenhum nulo nas séries horárias.
 
-### `open_meteo.historico_observado`
+### `open_meteo.previsao_historica_bruta`
 
-Resposta completa da API de arquivo histórico (tempo observado) do Open-Meteo, para a janela de
-16 a 10 dias antes da data de referência (a API publica com atraso).
+Previsões emitidas na véspera (D+1) para um período passado, da API de previsões anteriores do
+Open-Meteo (`notebooks/07_previsao_clima_historica.py`). Existe para o reprocessamento: a coleta
+diária só guarda previsões a partir do dia em que começou. Uma linha por ponto e mês.
 
 | Coluna | Tipo | Descrição |
 |---|---|---|
-| `start_date`, `end_date` | string | Janela pedida (7 dias) |
-| `latitude_requested`, `longitude_requested` | double | Ponto pedido |
-| `raw_response` | string | JSON completo (168 horas) |
+| `ponto_id`, `uf`, `tipo_ponto` | string | Ponto de coleta (ver abaixo); nulo nas linhas anteriores a 29/09/2026, que eram de Fortaleza |
+| `latitude_requested`, `longitude_requested` | double | Coordenadas pedidas à API |
+| `start_date`, `end_date` | string | Período coberto pela resposta (no máximo um mês civil) |
+| `horizonte_dias` | long | Antecedência da previsão (1 = emitida na véspera) |
+| `raw_response` | string | JSON completo da API |
+
+- As variáveis vêm com o sufixo `_previous_day1` (ex.: `wind_speed_100m_previous_day1`).
+- A API tem previsões D+1 a partir de meados de 2024.
+- `rain`, `cloud_cover_low/mid/high`, `uv_index` e `visibility` vêm nulos nessa API.
+
+### `open_meteo.historico_observado`
+
+Resposta completa da API de arquivo histórico (tempo observado) do Open-Meteo. Padrão: janela de
+16 a 10 dias antes da data de referência (a API publica com atraso). No reprocessamento, o
+período é informado e buscado mês a mês.
+
+| Coluna | Tipo | Descrição |
+|---|---|---|
+| `ponto_id`, `uf`, `tipo_ponto` | string | Ponto de coleta (ver abaixo); nulo nas linhas anteriores a 29/09/2026, que eram de Fortaleza |
+| `latitude_requested`, `longitude_requested` | double | Coordenadas pedidas à API |
+| `start_date`, `end_date` | string | Período pedido (a janela semanal ou um mês do reprocessamento) |
+| `raw_response` | string | JSON completo (uma série horária por variável) |
 
 - No agendamento semanal, as janelas se encaixam sem sobreposição. Execuções fora do agendamento
   (como a manual de 28/09/2026) criam janelas sobrepostas.
@@ -199,3 +234,5 @@ Uma linha por execução de notebook de ingestão.
 | 28/09/2026 | A previsão do tempo passa a buscar o **dia seguinte** (`horizonte_dias = 1`) | O job roda às 21h; buscar o dia corrente não é uma previsão. As linhas anteriores (24 a 28/09) têm horizonte 0: previam o próprio dia da emissão. |
 | 28/09/2026 | A silver **guarda o histórico de versões** das releituras do ONS (ex.: revisões da carga) | Revisões são informação de negócio: mostram quanto e quando o dado mudou. A silver terá a versão atual e o histórico. |
 | 28/09/2026 | A silver guarda **todos os subsistemas**; o recorte do Nordeste acontece na gold | Silver sem regra de negócio serve a qualquer pergunta futura. |
+| 29/09/2026 | Clima coletado em 15 pontos (usinas por estado e fonte, e capitais), com vento a 100 m | Um único ponto (Fortaleza) não representa usinas espalhadas pelo Nordeste; o vento que move as turbinas é o da altura do rotor. |
+| 29/09/2026 | Reprocessamento de 24 meses (ONS e clima) | Sem histórico não há como analisar sazonalidade nem medir a precisão das previsões. |
