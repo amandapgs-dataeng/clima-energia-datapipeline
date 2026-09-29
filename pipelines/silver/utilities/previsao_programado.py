@@ -2,7 +2,7 @@
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
-from utilities.historico import SEQUENCIA
+from utilities.padrao_silver import SEQUENCIA, TabelaSilver
 from utilities.vocabulario import texto_limpo
 
 COLUNAS = [
@@ -44,3 +44,17 @@ def padronizar_previsao_programado(bronze: DataFrame) -> DataFrame:
         F.col("val_programado").try_cast("double").alias("programado_mwmed"),
         F.col("ingestion_timestamp").alias(SEQUENCIA),
     )
+
+
+TABELA = TabelaSilver(
+    nome="previsao_programado",
+    fonte="ons",
+    descricao="Geração prevista e programada pelo ONS por usina eólica ou solar, a cada meia hora",
+    tabelas_bronze=("ons.previsao_programado_eolsol",),
+    padronizar=padronizar_previsao_programado,
+    colunas=COLUNAS,
+    chave=CHAVE,
+    regras_descarte=REGRAS_DESCARTE,
+    regras_alerta=REGRAS_ALERTA,
+    colunas_versionadas=COLUNAS_VERSIONADAS,
+)
