@@ -90,10 +90,10 @@ resource "databricks_permissions" "pipeline_silver_dev" {
   }
 }
 
-resource "databricks_job" "silver" {
+resource "databricks_job" "tratamento" {
   for_each = var.environments
 
-  name                = "silver-clima-energia-${each.key}"
+  name                = "tratamento-clima-energia-${each.key}"
   max_concurrent_runs = 1
 
   git_source {
@@ -123,6 +123,17 @@ resource "databricks_job" "silver" {
   }
 
   # Tasks em ordem alfabética de task_key (a ordem em que a API as devolve).
+  # sincronizar_codigo -> silver -> gold
+  task {
+    task_key = "gold"
+    depends_on {
+      task_key = "silver"
+    }
+    pipeline_task {
+      pipeline_id = databricks_pipeline.gold[each.key].id
+    }
+  }
+
   task {
     task_key = "silver"
     depends_on {
@@ -149,4 +160,9 @@ resource "databricks_job" "silver" {
   email_notifications {
     on_failure = [var.email_alertas]
   }
+}
+
+moved {
+  from = databricks_job.silver
+  to   = databricks_job.tratamento
 }
