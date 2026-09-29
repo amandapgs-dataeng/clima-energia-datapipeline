@@ -48,6 +48,18 @@ def anos_da_janela(data_inicio, data_fim):
     return list(range(data_inicio.year, data_fim.year + 1))
 
 
+def meses_do_periodo(data_inicio, data_fim):
+    """Divide [data_inicio, data_fim] em blocos de no máximo um mês civil (para chamadas de API)."""
+    blocos = []
+    inicio = data_inicio
+    while inicio <= data_fim:
+        proximo_mes = (inicio.replace(day=28) + timedelta(days=4)).replace(day=1)
+        fim = min(proximo_mes - timedelta(days=1), data_fim)
+        blocos.append((inicio, fim))
+        inicio = proximo_mes
+    return blocos
+
+
 def janela_historico(data_referencia, dias_inicio=16, dias_fim=10):
     """(início, fim) da janela do histórico observado, que tem atraso de publicação."""
     return (

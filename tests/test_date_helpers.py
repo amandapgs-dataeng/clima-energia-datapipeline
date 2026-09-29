@@ -9,6 +9,7 @@ from utils.date_helpers import (
     janela_historico,
     janela_retroativa,
     mes_anterior_fechado,
+    meses_do_periodo,
     resolver_data_referencia,
 )
 
@@ -126,3 +127,27 @@ class TestJanelaHistorico:
         inicio, fim = janela_historico(datetime(2027, 1, 5))
         assert inicio == datetime(2026, 12, 20)
         assert fim == datetime(2026, 12, 26)
+
+
+class TestMesesDoPeriodo:
+    def test_divide_em_meses_civis(self):
+        assert meses_do_periodo(datetime(2024, 10, 15), datetime(2024, 12, 10)) == [
+            (datetime(2024, 10, 15), datetime(2024, 10, 31)),
+            (datetime(2024, 11, 1), datetime(2024, 11, 30)),
+            (datetime(2024, 12, 1), datetime(2024, 12, 10)),
+        ]
+
+    def test_periodo_dentro_de_um_mes(self):
+        assert meses_do_periodo(datetime(2026, 9, 11), datetime(2026, 9, 17)) == [(datetime(2026, 9, 11), datetime(2026, 9, 17))]
+
+    def test_fevereiro_bissexto_e_virada_de_ano(self):
+        blocos = meses_do_periodo(datetime(2023, 12, 20), datetime(2024, 3, 1))
+        assert blocos[1] == (datetime(2024, 1, 1), datetime(2024, 1, 31))
+        assert blocos[2] == (datetime(2024, 2, 1), datetime(2024, 2, 29))
+        assert blocos[-1] == (datetime(2024, 3, 1), datetime(2024, 3, 1))
+
+    def test_dois_anos_cobrem_todos_os_dias_sem_sobrepor(self):
+        blocos = meses_do_periodo(datetime(2024, 10, 1), datetime(2026, 9, 27))
+        assert len(blocos) == 24
+        for (_, fim), (inicio, _) in zip(blocos, blocos[1:]):
+            assert (inicio - fim).days == 1

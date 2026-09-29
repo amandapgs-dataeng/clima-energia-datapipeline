@@ -112,7 +112,9 @@ resource "databricks_job" "silver" {
   dynamic "trigger" {
     for_each = each.value.schedule_paused ? [] : [1]
     content {
-      pause_status = "UNPAUSED"
+      # Pausado durante o reprocessamento de 29/09/2026: a bronze recebe o formato novo do clima
+      # (vários pontos) antes da silver que o entende. Reativado junto com a silver nova.
+      pause_status = "PAUSED"
       table_update {
         table_names                    = local.tabelas_bronze_silver
         condition                      = "ANY_UPDATED" # qualquer tabela da bronze atualizada dispara a silver
