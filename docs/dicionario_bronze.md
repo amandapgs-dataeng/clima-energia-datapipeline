@@ -51,6 +51,13 @@ de correspondência.
 **Valores levemente negativos são físicos.** Usinas solares registram cerca de −1,4 MW de
 madrugada: é o consumo interno da usina sem geração. Não é erro de dado.
 
+**A fonte muda o tipo de colunas ao longo do tempo.** Nos arquivos do ONS até pelo menos
+06/2025, `val_geracao` (geração) e `val_fatorcapacidade` (fator de capacidade) vêm como texto
+(`"58.91700000"`, `"0E-8"`, vazio); a partir de 07/2026, como número. A bronze mantém um tipo
+por coluna: a ingestão converte o valor para o tipo que a tabela já tem, vazio vira nulo, e
+qualquer outro valor que não converta interrompe a ingestão, em vez de virar nulo em silêncio
+(`notebooks/utils/schema_helpers.py`).
+
 ## Tipos de duplicata encontrados
 
 | Tipo | Exemplo | Tratamento na silver |
