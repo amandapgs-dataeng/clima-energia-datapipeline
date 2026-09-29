@@ -2,7 +2,7 @@
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
-from utilities.historico import SEQUENCIA
+from utilities.padrao_silver import SEQUENCIA, TabelaSilver
 from utilities.vocabulario import (
     codigo_subsistema,
     hora_local_ons,
@@ -58,3 +58,17 @@ def padronizar_geracao_usina(bronze: DataFrame) -> DataFrame:
         F.col("val_geracao").cast("double").alias("geracao_mwmed"),
         F.col("ingestion_timestamp").alias(SEQUENCIA),
     )
+
+
+TABELA = TabelaSilver(
+    nome="geracao_usina",
+    fonte="ons",
+    descricao="Geração horária por usina, todas as fontes e subsistemas",
+    tabelas_bronze=("ons.geracao_usina",),
+    padronizar=padronizar_geracao_usina,
+    colunas=COLUNAS,
+    chave=CHAVE,
+    regras_descarte=REGRAS_DESCARTE,
+    regras_alerta=REGRAS_ALERTA,
+    colunas_versionadas=COLUNAS_VERSIONADAS,
+)

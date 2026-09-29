@@ -5,7 +5,7 @@ Conjuntos híbridos (eólico + solar) têm uma linha por tipo; id_ons distingue 
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
 
-from utilities.historico import SEQUENCIA
+from utilities.padrao_silver import SEQUENCIA, TabelaSilver
 from utilities.vocabulario import (
     codigo_subsistema,
     hora_local_ons,
@@ -84,3 +84,17 @@ def padronizar_fator_capacidade(bronze: DataFrame) -> DataFrame:
         F.col("val_fatorcapacidade").cast("double").alias("fator_capacidade"),
         F.col("ingestion_timestamp").alias(SEQUENCIA),
     )
+
+
+TABELA = TabelaSilver(
+    nome="fator_capacidade",
+    fonte="ons",
+    descricao="Fator de capacidade horário de usinas e conjuntos eólicos e solares",
+    tabelas_bronze=("ons.fator_capacidade",),
+    padronizar=padronizar_fator_capacidade,
+    colunas=COLUNAS,
+    chave=CHAVE,
+    regras_descarte=REGRAS_DESCARTE,
+    regras_alerta=REGRAS_ALERTA,
+    colunas_versionadas=COLUNAS_VERSIONADAS,
+)
