@@ -66,8 +66,10 @@ flowchart LR
 - **Ingestão defensiva.** Retry HTTP com backoff exponencial e timeout, logging estruturado e um
   log de auditoria que registra falhas além de sucessos. O job continua falhando de forma
   visível e mandando alerta.
-- **Controle de custo.** Os jobs rodam em clusters de job efêmeros, de um nó só, e um alerta de
-  orçamento acompanha o gasto (menos de US$ 50 por mês).
+- **Controle de custo.** Os jobs rodam em clusters de job efêmeros, de um nó só, a silver roda em
+  compute serverless só quando a bronze muda, e um alerta de orçamento mensal acompanha o gasto.
+  Em operação normal, o projeto custa cerca de R$ 10 por dia; uns R$ 6 são o custo fixo do NAT
+  gateway exigido pela conectividade segura dos clusters (sem IP público).
 
 ## O que o profiling do dado revelou
 

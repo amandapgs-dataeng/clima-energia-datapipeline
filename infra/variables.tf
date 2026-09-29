@@ -25,3 +25,9 @@ variable "email_alertas" {
   description = "E-mail que recebe alertas de orçamento e de falha dos jobs"
   type        = string
 }
+
+variable "orcamento_mensal" {
+  description = "Orçamento mensal da assinatura, na moeda de cobrança (BRL); alertas em 50%, 80% e 100%"
+  type        = number
+  default     = 300
+}
