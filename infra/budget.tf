@@ -3,7 +3,7 @@ data "azurerm_subscription" "current" {}
 resource "azurerm_consumption_budget_subscription" "main" {
   name            = "budget-clima-energia-br"
   subscription_id = data.azurerm_subscription.current.id
-  amount          = 50
+  amount          = var.orcamento_mensal # na moeda de cobrança da assinatura (BRL)
   time_grain      = "Monthly"
 
   time_period {
