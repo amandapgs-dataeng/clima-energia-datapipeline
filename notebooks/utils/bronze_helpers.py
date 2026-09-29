@@ -11,6 +11,7 @@ from pyspark.sql import functions as F
 
 from utils.date_helpers import FORMATO_DATA
 from utils.http_helpers import baixar_arquivo
+from utils.schema_helpers import alinhar_ao_schema
 
 TAMANHO_MAX_ERRO = 1000
 TABELA_AUDITORIA = "controle._audit_log"
@@ -30,7 +31,14 @@ def ler_parquet_remoto(spark, url, nome_arquivo):
 
 
 def gravar_bronze(df, tabela, fonte, ingestion_timestamp):
-    """Acrescenta metadados de ingestão, grava em `tabela` e devolve as linhas gravadas."""
+    """Acrescenta metadados de ingestão, grava em `tabela` e devolve as linhas gravadas.
+
+    Se a fonte mudou o tipo de alguma coluna, o valor é convertido para o tipo que a tabela já
+    tem (ver utils/schema_helpers.py).
+    """
+    spark = df.sparkSession
+    if spark.catalog.tableExists(tabela):
+        df = alinhar_ao_schema(df, spark.table(tabela).schema)
     (
         df.withColumn("ingestion_timestamp", F.lit(ingestion_timestamp))
         .withColumn("source", F.lit(fonte))
@@ -40,7 +48,7 @@ def gravar_bronze(df, tabela, fonte, ingestion_timestamp):
         .saveAsTable(tabela)
     )
     # Contagem pelas métricas do commit Delta: evita reprocessar o DataFrame só para contar.
-    metricas = DeltaTable.forName(df.sparkSession, tabela).history(1).first()["operationMetrics"]
+    metricas = DeltaTable.forName(spark, tabela).history(1).first()["operationMetrics"]
     return int(metricas.get("numOutputRows", 0))
 
 
