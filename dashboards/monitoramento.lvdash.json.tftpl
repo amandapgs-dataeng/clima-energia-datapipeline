@@ -1,0 +1,580 @@
+{
+  "datasets": [
+    {
+      "name": "resumo",
+      "displayName": "Resumo dos últimos 30 dias",
+      "queryLines": [
+        "SELECT\n",
+        "  (SELECT count(*) FROM ${catalog_bronze}.controle._audit_log WHERE execution_timestamp >= current_timestamp() - INTERVAL 30 DAYS) AS execucoes_ingestao,\n",
+        "  (SELECT count(*) FROM ${catalog_bronze}.controle._audit_log WHERE status = 'failed' AND execution_timestamp >= current_timestamp() - INTERVAL 30 DAYS) AS falhas_ingestao,\n",
+        "  (SELECT sum(n) FROM (\n",
+        "     SELECT count(*) AS n FROM ${catalog}.silver.carga_energia_quarentena UNION ALL\n",
+        "     SELECT count(*) FROM ${catalog}.silver.geracao_usina_quarentena UNION ALL\n",
+        "     SELECT count(*) FROM ${catalog}.silver.fator_capacidade_quarentena UNION ALL\n",
+        "     SELECT count(*) FROM ${catalog}.silver.previsao_programado_quarentena UNION ALL\n",
+        "     SELECT count(*) FROM ${catalog}.silver.clima_previsao_quarentena UNION ALL\n",
+        "     SELECT count(*) FROM ${catalog}.silver.clima_observado_quarentena)) AS registros_em_quarentena\n"
+      ]
+    },
+    {
+      "name": "ingestao_diaria",
+      "displayName": "Linhas ingeridas por dia",
+      "queryLines": [
+        "SELECT to_date(convert_timezone('UTC', 'America/Sao_Paulo', execution_timestamp)) AS dia, pipeline_name AS notebook, sum(linhas_gravadas) AS linhas\n",
+        "FROM ${catalog_bronze}.controle._audit_log WHERE status = 'success' AND execution_timestamp >= current_timestamp() - INTERVAL 30 DAYS\n",
+        "GROUP BY 1, 2\n"
+      ]
+    },
+    {
+      "name": "ultimas_execucoes",
+      "displayName": "Últimas execuções da ingestão",
+      "queryLines": [
+        "SELECT convert_timezone('UTC', 'America/Sao_Paulo', execution_timestamp) AS inicio_brasilia, pipeline_name AS notebook, status, linhas_gravadas,\n",
+        "  duracao_segundos, erro\n",
+        "FROM ${catalog_bronze}.controle._audit_log ORDER BY execution_timestamp DESC LIMIT 50\n"
+      ]
+    },
+    {
+      "name": "atualizacoes_pipelines",
+      "displayName": "Atualizações dos pipelines",
+      "queryLines": [
+        "WITH eventos AS (\n",
+        "  SELECT 'silver' AS camada, origin.update_id, timestamp, details:update_progress.state::string AS estado\n",
+        "  FROM ${catalog}.silver.${event_log_silver} WHERE event_type = 'update_progress'\n",
+        "  UNION ALL\n",
+        "  SELECT 'gold', origin.update_id, timestamp, details:update_progress.state::string\n",
+        "  FROM ${catalog}.gold.${event_log_gold} WHERE event_type = 'update_progress')\n",
+        "SELECT camada, convert_timezone('UTC', 'America/Sao_Paulo', min(timestamp)) AS inicio_brasilia,\n",
+        "  round((unix_millis(max(timestamp)) - unix_millis(min(timestamp))) / 60000, 1) AS duracao_min,\n",
+        "  max_by(estado, timestamp) AS estado\n",
+        "FROM eventos WHERE timestamp >= current_timestamp() - INTERVAL 30 DAYS GROUP BY camada, update_id\n"
+      ]
+    },
+    {
+      "name": "qualidade",
+      "displayName": "Regras de qualidade",
+      "queryLines": [
+        "SELECT replace(e.dataset, '_validada', '') AS tabela, e.name AS regra,\n",
+        "  sum(e.passed_records) AS aprovados, sum(e.failed_records) AS reprovados\n",
+        "FROM ${catalog}.silver.${event_log_silver}\n",
+        "LATERAL VIEW explode(from_json(details:flow_progress.data_quality.expectations::string,\n",
+        "  'array<struct<name:string,dataset:string,passed_records:bigint,failed_records:bigint>>')) AS e\n",
+        "WHERE event_type = 'flow_progress' AND e.dataset LIKE '%_validada'\n",
+        "GROUP BY 1, 2\n"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "operacao",
+      "displayName": "Operação",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "titulo_mon",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# Monitoramento do pipeline",
+                "Últimos 30 dias, horário de Brasília. Ingestão: log de auditoria da bronze. Silver e gold: log de eventos dos pipelines."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "c_exec",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "resumo",
+                  "fields": [
+                    {
+                      "name": "execucoes_ingestao",
+                      "expression": "`execucoes_ingestao`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "execucoes_ingestao",
+                  "displayName": "Execuções da ingestão"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Execuções da ingestão"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_falhas",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "resumo",
+                  "fields": [
+                    {
+                      "name": "falhas_ingestao",
+                      "expression": "`falhas_ingestao`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "falhas_ingestao",
+                  "displayName": "Falhas da ingestão"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Falhas da ingestão"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 1,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_quarentena",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "resumo",
+                  "fields": [
+                    {
+                      "name": "registros_em_quarentena",
+                      "expression": "`registros_em_quarentena`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "registros_em_quarentena",
+                  "displayName": "Registros em quarentena (silver)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Registros em quarentena (silver)"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 1,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "g_ingestao",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ingestao_diaria",
+                  "fields": [
+                    {
+                      "name": "dia",
+                      "expression": "`dia`"
+                    },
+                    {
+                      "name": "linhas",
+                      "expression": "`linhas`"
+                    },
+                    {
+                      "name": "notebook",
+                      "expression": "`notebook`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "dia",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Dia"
+                },
+                "y": {
+                  "fieldName": "linhas",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Linhas"
+                },
+                "color": {
+                  "fieldName": "notebook",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Notebook"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Linhas gravadas na bronze por dia e notebook"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 4,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "g_pipelines",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "atualizacoes_pipelines",
+                  "fields": [
+                    {
+                      "name": "inicio_brasilia",
+                      "expression": "`inicio_brasilia`"
+                    },
+                    {
+                      "name": "duracao_min",
+                      "expression": "`duracao_min`"
+                    },
+                    {
+                      "name": "camada",
+                      "expression": "`camada`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "scatter",
+              "encodings": {
+                "x": {
+                  "fieldName": "inicio_brasilia",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Início"
+                },
+                "y": {
+                  "fieldName": "duracao_min",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Minutos"
+                },
+                "color": {
+                  "fieldName": "camada",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Camada"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Duração das atualizações da silver e da gold (min)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 10,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "t_execucoes",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "ultimas_execucoes",
+                  "fields": [
+                    {
+                      "name": "inicio_brasilia",
+                      "expression": "`inicio_brasilia`"
+                    },
+                    {
+                      "name": "notebook",
+                      "expression": "`notebook`"
+                    },
+                    {
+                      "name": "status",
+                      "expression": "`status`"
+                    },
+                    {
+                      "name": "linhas_gravadas",
+                      "expression": "`linhas_gravadas`"
+                    },
+                    {
+                      "name": "duracao_segundos",
+                      "expression": "`duracao_segundos`"
+                    },
+                    {
+                      "name": "erro",
+                      "expression": "`erro`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "inicio_brasilia",
+                    "displayName": "Início (Brasília)"
+                  },
+                  {
+                    "fieldName": "notebook",
+                    "displayName": "Notebook"
+                  },
+                  {
+                    "fieldName": "status",
+                    "displayName": "Status"
+                  },
+                  {
+                    "fieldName": "linhas_gravadas",
+                    "displayName": "Linhas"
+                  },
+                  {
+                    "fieldName": "duracao_segundos",
+                    "displayName": "Duração (s)"
+                  },
+                  {
+                    "fieldName": "erro",
+                    "displayName": "Erro"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Últimas execuções da ingestão"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 16,
+            "width": 6,
+            "height": 8
+          }
+        }
+      ]
+    },
+    {
+      "name": "qualidade_pagina",
+      "displayName": "Qualidade",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "t_qual",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Regras de qualidade da silver",
+                "Registros avaliados por regra. Reprovados em regras de descarte vão para as tabelas x_quarentena."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "g_reprovados",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "qualidade",
+                  "fields": [
+                    {
+                      "name": "regra",
+                      "expression": "`regra`"
+                    },
+                    {
+                      "name": "reprovados",
+                      "expression": "`reprovados`"
+                    },
+                    {
+                      "name": "tabela",
+                      "expression": "`tabela`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "regra",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Regra"
+                },
+                "y": {
+                  "fieldName": "reprovados",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Reprovados"
+                },
+                "color": {
+                  "fieldName": "tabela",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Tabela"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Registros reprovados por regra"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "t_qualidade",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "qualidade",
+                  "fields": [
+                    {
+                      "name": "tabela",
+                      "expression": "`tabela`"
+                    },
+                    {
+                      "name": "regra",
+                      "expression": "`regra`"
+                    },
+                    {
+                      "name": "aprovados",
+                      "expression": "`aprovados`"
+                    },
+                    {
+                      "name": "reprovados",
+                      "expression": "`reprovados`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "table",
+              "encodings": {
+                "columns": [
+                  {
+                    "fieldName": "tabela",
+                    "displayName": "Tabela"
+                  },
+                  {
+                    "fieldName": "regra",
+                    "displayName": "Regra"
+                  },
+                  {
+                    "fieldName": "aprovados",
+                    "displayName": "Aprovados"
+                  },
+                  {
+                    "fieldName": "reprovados",
+                    "displayName": "Reprovados"
+                  }
+                ]
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Avaliação por tabela e regra"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 7,
+            "width": 6,
+            "height": 8
+          }
+        }
+      ]
+    }
+  ]
+}
