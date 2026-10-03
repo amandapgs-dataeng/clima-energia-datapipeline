@@ -1,0 +1,1102 @@
+{
+  "datasets": [
+    {
+      "name": "destaques",
+      "displayName": "Destaques",
+      "queryLines": [
+        "SELECT\n",
+        "  (SELECT round(sum(geracao_verificada_mwh) / sum(capacidade_mwh) * 100, 1) FROM ${catalog}.gold.aproveitamento_mensal\n",
+        "    WHERE tipo_usina = 'Eólica' AND month(mes) BETWEEN 7 AND 10) AS fator_eolico_safra_pct,\n",
+        "  (SELECT round(sum(geracao_verificada_mwh) / sum(capacidade_mwh) * 100, 1) FROM ${catalog}.gold.aproveitamento_mensal\n",
+        "    WHERE tipo_usina = 'Eólica' AND month(mes) BETWEEN 1 AND 4) AS fator_eolico_entressafra_pct,\n",
+        "  (SELECT round(sum(restricao_mwh) / 1e6, 1) FROM ${catalog}.gold.restricao_geracao_diaria) AS restricao_twh,\n",
+        "  (SELECT round(avg(correlacao), 2) FROM ${catalog}.gold.correlacao_clima_geracao WHERE variavel = 'vento_100m_ms') AS correlacao_vento,\n",
+        "  (SELECT round(avg(erro_medio_absoluto_vento_100m_kmh), 1) FROM ${catalog}.gold.precisao_previsao_tempo) AS erro_previsao_vento_kmh\n"
+      ]
+    },
+    {
+      "name": "aproveitamento_ne",
+      "displayName": "Aproveitamento do Nordeste por mês",
+      "queryLines": [
+        "SELECT mes, tipo_usina, round(sum(geracao_verificada_mwh) / sum(capacidade_mwh) * 100, 1) AS fator_pct\n",
+        "FROM ${catalog}.gold.aproveitamento_mensal GROUP BY mes, tipo_usina\n"
+      ]
+    },
+    {
+      "name": "aproveitamento_uf",
+      "displayName": "Aproveitamento por estado",
+      "queryLines": [
+        "SELECT uf, tipo_usina, round(sum(geracao_verificada_mwh) / sum(capacidade_mwh) * 100, 1) AS fator_pct\n",
+        "FROM ${catalog}.gold.aproveitamento_mensal GROUP BY uf, tipo_usina\n"
+      ]
+    },
+    {
+      "name": "curva_eolica",
+      "displayName": "Curva de potência eólica",
+      "queryLines": [
+        "SELECT faixa_inicio AS vento_ms, round(fator_capacidade * 100, 1) AS fator_pct, horas\n",
+        "FROM ${catalog}.gold.curva_de_potencia WHERE tipo_usina = 'Eólica' AND horas >= 100\n"
+      ]
+    },
+    {
+      "name": "curva_solar",
+      "displayName": "Curva de potência solar",
+      "queryLines": [
+        "SELECT faixa_inicio AS radiacao_wm2, round(fator_capacidade * 100, 1) AS fator_pct, horas\n",
+        "FROM ${catalog}.gold.curva_de_potencia WHERE tipo_usina = 'Solar' AND horas >= 100\n"
+      ]
+    },
+    {
+      "name": "correlacao",
+      "displayName": "Correlação clima x geração",
+      "queryLines": [
+        "SELECT uf, concat(tipo_usina, ': ', CASE variavel WHEN 'vento_100m_ms' THEN 'vento a 100 m'\n",
+        "  WHEN 'radiacao_solar_wm2' THEN 'radiação' WHEN 'cobertura_nuvens_pct' THEN 'nuvens' ELSE 'temperatura' END) AS relacao,\n",
+        "  round(correlacao, 2) AS correlacao\n",
+        "FROM ${catalog}.gold.correlacao_clima_geracao WHERE variavel IN ('vento_100m_ms', 'radiacao_solar_wm2')\n"
+      ]
+    },
+    {
+      "name": "restricao_mensal",
+      "displayName": "Restrição por mês",
+      "queryLines": [
+        "SELECT date_trunc('month', data) AS mes, round(sum(restricao_mwh) / 1000, 0) AS restricao_gwh,\n",
+        "  round(sum(restricao_mwh) / sum(previsto_mwh) * 100, 1) AS restricao_pct\n",
+        "FROM ${catalog}.gold.restricao_geracao_diaria\n",
+        "WHERE data < date_trunc('month', current_date())  -- só meses completos\n",
+        "GROUP BY 1\n"
+      ]
+    },
+    {
+      "name": "restricao_usinas",
+      "displayName": "Usinas mais restringidas",
+      "queryLines": [
+        "SELECT nome_usina, round(sum(restricao_mwh) / 1000, 1) AS restricao_gwh\n",
+        "FROM ${catalog}.gold.restricao_geracao_por_usina GROUP BY nome_usina ORDER BY restricao_gwh DESC LIMIT 10\n"
+      ]
+    },
+    {
+      "name": "precisao_programacao",
+      "displayName": "Precisão da programação do ONS",
+      "queryLines": [
+        "SELECT mes, tipo_usina, round(sum(erro_absoluto_mwh) / sum(geracao_verificada_mwh) * 100, 1) AS erro_pct\n",
+        "FROM ${catalog}.gold.precisao_programacao_mensal GROUP BY mes, tipo_usina\n"
+      ]
+    },
+    {
+      "name": "precisao_tempo",
+      "displayName": "Precisão da previsão do tempo",
+      "queryLines": [
+        "SELECT ponto_id, round(avg(erro_medio_absoluto_vento_100m_kmh), 1) AS erro_vento_kmh,\n",
+        "  round(avg(vento_100m_observado_kmh), 1) AS vento_medio_kmh\n",
+        "FROM ${catalog}.gold.precisao_previsao_tempo GROUP BY ponto_id\n"
+      ]
+    },
+    {
+      "name": "carga_temperatura",
+      "displayName": "Carga x temperatura",
+      "queryLines": [
+        "SELECT temperatura_media_c, round(carga_mwmed / 1000, 2) AS carga_gwmed,\n",
+        "  CASE WHEN fim_de_semana THEN 'Fim de semana' ELSE 'Dia útil' END AS tipo_dia\n",
+        "FROM ${catalog}.gold.carga_x_temperatura\n"
+      ]
+    }
+  ],
+  "pages": [
+    {
+      "name": "visao_geral",
+      "displayName": "Visão geral",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "titulo",
+            "multilineTextboxSpec": {
+              "lines": [
+                "# Vento e sol no Nordeste: quanto do potencial renovável vira energia, e por quê",
+                "Dados do ONS (geração, capacidade, programação, carga) e do Open-Meteo (clima no local das usinas), out/2024 a set/2026. Pipeline em Azure Databricks: bronze → silver → gold."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "c_safra",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "destaques",
+                  "fields": [
+                    {
+                      "name": "fator_eolico_safra_pct",
+                      "expression": "`fator_eolico_safra_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "fator_eolico_safra_pct",
+                  "displayName": "Fator eólico na safra dos ventos (jul–out), %"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Fator eólico na safra dos ventos (jul–out), %"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_entressafra",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "destaques",
+                  "fields": [
+                    {
+                      "name": "fator_eolico_entressafra_pct",
+                      "expression": "`fator_eolico_entressafra_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "fator_eolico_entressafra_pct",
+                  "displayName": "Fator eólico na entressafra (jan–abr), %"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Fator eólico na entressafra (jan–abr), %"
+              }
+            }
+          },
+          "position": {
+            "x": 2,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_restricao",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "destaques",
+                  "fields": [
+                    {
+                      "name": "restricao_twh",
+                      "expression": "`restricao_twh`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "restricao_twh",
+                  "displayName": "Geração prevista e não programada (abr–set/2026), TWh"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Geração prevista e não programada (abr–set/2026), TWh"
+              }
+            }
+          },
+          "position": {
+            "x": 4,
+            "y": 2,
+            "width": 2,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_correlacao",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "destaques",
+                  "fields": [
+                    {
+                      "name": "correlacao_vento",
+                      "expression": "`correlacao_vento`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "correlacao_vento",
+                  "displayName": "Correlação vento a 100 m × geração eólica"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Correlação vento a 100 m × geração eólica"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 5,
+            "width": 3,
+            "height": 3
+          }
+        },
+        {
+          "widget": {
+            "name": "c_erro_tempo",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "destaques",
+                  "fields": [
+                    {
+                      "name": "erro_previsao_vento_kmh",
+                      "expression": "`erro_previsao_vento_kmh`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 2,
+              "widgetType": "counter",
+              "encodings": {
+                "value": {
+                  "fieldName": "erro_previsao_vento_kmh",
+                  "displayName": "Erro da previsão do vento (D+1), km/h"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Erro da previsão do vento (D+1), km/h"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 5,
+            "width": 3,
+            "height": 3
+          }
+        }
+      ]
+    },
+    {
+      "name": "aproveitamento",
+      "displayName": "1. Aproveitamento",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "t_aprov",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Quanto da capacidade instalada vira energia?",
+                "Fator de capacidade = energia gerada / energia que a capacidade instalada geraria a plena carga."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "g_aprov_mes",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "aproveitamento_ne",
+                  "fields": [
+                    {
+                      "name": "mes",
+                      "expression": "`mes`"
+                    },
+                    {
+                      "name": "fator_pct",
+                      "expression": "`fator_pct`"
+                    },
+                    {
+                      "name": "tipo_usina",
+                      "expression": "`tipo_usina`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "mes",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Mês"
+                },
+                "y": {
+                  "fieldName": "fator_pct",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Fator (%)"
+                },
+                "color": {
+                  "fieldName": "tipo_usina",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Fonte"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Fator de capacidade no Nordeste, por mês (%)",
+                "showDescription": true,
+                "description": "A safra dos ventos (jul–out) quase dobra o aproveitamento eólico."
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "g_aprov_uf",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "aproveitamento_uf",
+                  "fields": [
+                    {
+                      "name": "uf",
+                      "expression": "`uf`"
+                    },
+                    {
+                      "name": "fator_pct",
+                      "expression": "`fator_pct`"
+                    },
+                    {
+                      "name": "tipo_usina",
+                      "expression": "`tipo_usina`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "uf",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Estado"
+                },
+                "y": {
+                  "fieldName": "fator_pct",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Fator (%)"
+                },
+                "color": {
+                  "fieldName": "tipo_usina",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Fonte"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Fator de capacidade médio por estado (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 7,
+            "width": 6,
+            "height": 6
+          }
+        }
+      ]
+    },
+    {
+      "name": "clima",
+      "displayName": "2. Clima × geração",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "t_clima",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## O clima no local das usinas explica a geração?",
+                "Clima observado no centro das usinas de cada estado e fonte, ponderado pela capacidade instalada."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "g_curva_eolica",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "curva_eolica",
+                  "fields": [
+                    {
+                      "name": "vento_ms",
+                      "expression": "`vento_ms`"
+                    },
+                    {
+                      "name": "fator_pct",
+                      "expression": "`fator_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "vento_ms",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Vento a 100 m (m/s)"
+                },
+                "y": {
+                  "fieldName": "fator_pct",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Fator (%)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Curva de potência eólica: fator (%) por vento a 100 m (m/s)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "g_curva_solar",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "curva_solar",
+                  "fields": [
+                    {
+                      "name": "radiacao_wm2",
+                      "expression": "`radiacao_wm2`"
+                    },
+                    {
+                      "name": "fator_pct",
+                      "expression": "`fator_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "radiacao_wm2",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Radiação (W/m²)"
+                },
+                "y": {
+                  "fieldName": "fator_pct",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Fator (%)"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Curva solar: fator (%) por radiação (W/m²)"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 1,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "g_correlacao",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "correlacao",
+                  "fields": [
+                    {
+                      "name": "uf",
+                      "expression": "`uf`"
+                    },
+                    {
+                      "name": "correlacao",
+                      "expression": "`correlacao`"
+                    },
+                    {
+                      "name": "relacao",
+                      "expression": "`relacao`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "uf",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Estado"
+                },
+                "y": {
+                  "fieldName": "correlacao",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Correlação (−1 a 1)"
+                },
+                "color": {
+                  "fieldName": "relacao",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Relação"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Correlação entre o clima e a geração, por estado"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 7,
+            "width": 6,
+            "height": 6
+          }
+        }
+      ]
+    },
+    {
+      "name": "restricao",
+      "displayName": "3. Restrição",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "t_restr",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## Quanto da geração prevista o ONS deixou de programar?",
+                "Restrição = previsto − programado, quando positivo. Brasil: 91% da capacidade eólica está no Nordeste; na solar, cerca de metade. Indicador calculado, não a medição oficial de cortes."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 2
+          }
+        },
+        {
+          "widget": {
+            "name": "g_restr_gwh",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "restricao_mensal",
+                  "fields": [
+                    {
+                      "name": "mes",
+                      "expression": "`mes`"
+                    },
+                    {
+                      "name": "restricao_gwh",
+                      "expression": "`restricao_gwh`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "mes",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Mês"
+                },
+                "y": {
+                  "fieldName": "restricao_gwh",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "GWh"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Geração prevista e não programada, por mês (GWh)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 2,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "g_restr_pct",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "restricao_mensal",
+                  "fields": [
+                    {
+                      "name": "mes",
+                      "expression": "`mes`"
+                    },
+                    {
+                      "name": "restricao_pct",
+                      "expression": "`restricao_pct`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "mes",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Mês"
+                },
+                "y": {
+                  "fieldName": "restricao_pct",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "%"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Restrição em relação ao previsto (%)"
+              }
+            }
+          },
+          "position": {
+            "x": 3,
+            "y": 2,
+            "width": 3,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "g_restr_usinas",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "restricao_usinas",
+                  "fields": [
+                    {
+                      "name": "nome_usina",
+                      "expression": "`nome_usina`"
+                    },
+                    {
+                      "name": "restricao_gwh",
+                      "expression": "`restricao_gwh`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "nome_usina",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Usina"
+                },
+                "y": {
+                  "fieldName": "restricao_gwh",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "GWh"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "As 10 usinas com mais geração não programada (GWh)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 8,
+            "width": 6,
+            "height": 6
+          }
+        }
+      ]
+    },
+    {
+      "name": "precisao",
+      "displayName": "4. Precisão das previsões",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "t_prec",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## O planejamento acerta?",
+                "Programação do ONS: erro hora a hora, usina a usina, em relação à geração verificada. Previsão do tempo: erro da previsão feita na véspera (D+1) em relação ao observado."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "g_prec_prog",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "precisao_programacao",
+                  "fields": [
+                    {
+                      "name": "mes",
+                      "expression": "`mes`"
+                    },
+                    {
+                      "name": "erro_pct",
+                      "expression": "`erro_pct`"
+                    },
+                    {
+                      "name": "tipo_usina",
+                      "expression": "`tipo_usina`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "line",
+              "encodings": {
+                "x": {
+                  "fieldName": "mes",
+                  "scale": {
+                    "type": "temporal"
+                  },
+                  "displayName": "Mês"
+                },
+                "y": {
+                  "fieldName": "erro_pct",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Erro (%)"
+                },
+                "color": {
+                  "fieldName": "tipo_usina",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Fonte"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Erro da programação do ONS (% da geração verificada)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 6,
+            "height": 6
+          }
+        },
+        {
+          "widget": {
+            "name": "g_prec_tempo",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "precisao_tempo",
+                  "fields": [
+                    {
+                      "name": "ponto_id",
+                      "expression": "`ponto_id`"
+                    },
+                    {
+                      "name": "erro_vento_kmh",
+                      "expression": "`erro_vento_kmh`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "bar",
+              "encodings": {
+                "x": {
+                  "fieldName": "ponto_id",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Ponto"
+                },
+                "y": {
+                  "fieldName": "erro_vento_kmh",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "km/h"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Erro médio da previsão D+1 do vento a 100 m, por ponto (km/h)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 7,
+            "width": 6,
+            "height": 6
+          }
+        }
+      ]
+    },
+    {
+      "name": "carga",
+      "displayName": "Bônus: carga × temperatura",
+      "pageType": "PAGE_TYPE_CANVAS",
+      "layout": [
+        {
+          "widget": {
+            "name": "t_carga",
+            "multilineTextboxSpec": {
+              "lines": [
+                "## O consumo do Nordeste sobe nos dias mais quentes?",
+                "Temperatura média das capitais (Fortaleza, Recife, Salvador). Associação, não causalidade: estação do ano e calendário também influenciam a carga."
+              ]
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 0,
+            "width": 6,
+            "height": 1
+          }
+        },
+        {
+          "widget": {
+            "name": "g_carga",
+            "queries": [
+              {
+                "name": "main_query",
+                "query": {
+                  "datasetName": "carga_temperatura",
+                  "fields": [
+                    {
+                      "name": "temperatura_media_c",
+                      "expression": "`temperatura_media_c`"
+                    },
+                    {
+                      "name": "carga_gwmed",
+                      "expression": "`carga_gwmed`"
+                    },
+                    {
+                      "name": "tipo_dia",
+                      "expression": "`tipo_dia`"
+                    }
+                  ],
+                  "disaggregated": true
+                }
+              }
+            ],
+            "spec": {
+              "version": 3,
+              "widgetType": "scatter",
+              "encodings": {
+                "x": {
+                  "fieldName": "temperatura_media_c",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Temperatura média (°C)"
+                },
+                "y": {
+                  "fieldName": "carga_gwmed",
+                  "scale": {
+                    "type": "quantitative"
+                  },
+                  "displayName": "Carga (GW médios)"
+                },
+                "color": {
+                  "fieldName": "tipo_dia",
+                  "scale": {
+                    "type": "categorical"
+                  },
+                  "displayName": "Dia"
+                }
+              },
+              "frame": {
+                "showTitle": true,
+                "title": "Carga do Nordeste (GW médios) × temperatura média (°C)"
+              }
+            }
+          },
+          "position": {
+            "x": 0,
+            "y": 1,
+            "width": 6,
+            "height": 8
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -98,7 +98,8 @@ pipelines/silver/    Lakeflow Declarative Pipeline da camada silver
 pipelines/gold/      Lakeflow Declarative Pipeline da camada gold (métricas de negócio)
   utils/             Funções compartilhadas e testadas (datas, HTTP, logging, gravação na bronze)
 tests/               Testes com pytest (helpers sem Spark; transformações da silver em Spark local)
-docs/                Dicionários de dados (bronze, silver) e decisões de desenho
+dashboards/          Dashboards do Databricks AI/BI como código (gerados por construir.py, publicados pelo Terraform)
+docs/                Dicionários de dados (bronze, silver, gold) e decisões de desenho
 migracoes/           Migrações de dados pontuais (SQL)
 ```
 
@@ -139,7 +140,7 @@ pytest
 - [x] Silver: 6 tabelas com deduplicação, histórico de versões, tipagem, vocabulário comum e
   regras de qualidade ([dicionário da silver](docs/dicionario_silver.md))
 - [x] Gold: 9 tabelas que respondem às perguntas de negócio ([dicionário da gold](docs/dicionario_gold.md))
-- [ ] Dashboard
+- [x] Dashboards: resultados de negócio e monitoramento do pipeline (Databricks AI/BI, como código)
 
 ## Convenções
 
