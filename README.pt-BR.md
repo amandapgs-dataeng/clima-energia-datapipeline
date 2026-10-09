@@ -91,12 +91,18 @@ Antes de escrever qualquer transformação, a bronze foi perfilada
 
 ## Resultados
 
-Camada gold, Nordeste, 10/2024 a 09/2026 ([tabelas exportadas](docs/resultados/)).
+Camada gold, Nordeste, 10/2024 a 09/2026 ([tabelas exportadas](docs/resultados/)). Prints do dashboard de
+negócio (Databricks AI/BI), feitos antes da desativação da infraestrutura.
+
+![Visão geral](docs/imagens/negocio-0-visao-geral.png)
+*Visão geral. Os 10,6 TWh incluem os primeiros dias de outubro de 2026; de abril a setembro, são 10,2 TWh.*
 
 **1. Quanto da capacidade instalada vira energia?** As eólicas chegam a **44,7%** de fator de
 capacidade na safra dos ventos (julho a outubro), contra **28,7%** de janeiro a abril: a safra
 quase dobra a geração eólica (pico de 49,5% em 09/2025, mínimo de 22,2% em 02/2026). A solar fica
 perto de **20,9%** o ano todo.
+
+![Fator de capacidade por mês](docs/imagens/negocio-1-aproveitamento-mensal.png)
 
 **2. O clima no local das usinas explica a geração?** Sim. A curva de potência real sobe de 13%
 com vento de 2 m/s para 41% com 6 m/s e satura perto de **50% acima de 11 m/s**. A correlação com
@@ -104,19 +110,29 @@ a geração é de **0,61** para o vento a 100 m (de 0,39 a 0,81, conforme o esta
 para a radiação solar. A temperatura tem correlação *negativa* com a eólica (−0,40): no Nordeste,
 venta mais à noite.
 
+![Curvas de potência](docs/imagens/negocio-2-curvas-de-potencia.png)
+
 **3. Quanto da geração prevista deixou de ser programada?** A diferença entre a geração que o ONS
 previu e a que programou cresceu de **4,8%** em abril para **15,6%** em setembro de 2026:
 **10,2 TWh** em seis meses, concentrados na safra dos ventos. (Indicador do Brasil: 91% da
 capacidade eólica fica no Nordeste; não é a medição oficial de cortes.)
+
+![Restrição por mês](docs/imagens/negocio-3-restricao-mensal.png)
+![Restrição por usina](docs/imagens/negocio-3-restricao-por-usina.png)
 
 **4. As previsões acertam?** Hora a hora e usina a usina, a programação do ONS erra a geração real
 em **32%** (eólica) e **40%** (solar), quase sem viés no total. A previsão do tempo feita na
 véspera erra o vento a 100 m em **3,6 km/h** (vento médio de 21 km/h) e a temperatura em
 **0,74 °C**.
 
+![Erro da programação](docs/imagens/negocio-4-precisao-programacao.png)
+![Erro da previsão do tempo](docs/imagens/negocio-4-precisao-previsao-tempo.png)
+
 **Bônus.** A carga diária do Nordeste tem correlação de **0,51** com a temperatura das capitais
 (associação, não causalidade: estação do ano e calendário também influenciam) e é **7,7% menor**
 nos fins de semana.
+
+![Carga x temperatura](docs/imagens/negocio-5-carga-x-temperatura.png)
 
 ## Situação do projeto
 
