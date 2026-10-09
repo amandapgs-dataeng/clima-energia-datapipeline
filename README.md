@@ -90,12 +90,18 @@ Before writing any transformation, the bronze layer was profiled
 
 ## Results
 
-Gold layer, Brazil's Northeast, 10/2024–09/2026 ([exported tables](docs/resultados/)).
+Gold layer, Brazil's Northeast, 10/2024–09/2026 ([exported tables](docs/resultados/)). Screenshots from the
+business dashboard (Databricks AI/BI), taken before the infrastructure was decommissioned.
+
+![Overview](docs/imagens/negocio-0-visao-geral.png)
+*Overview. The 10.6 TWh figure includes the first days of October 2026; April–September alone is 10.2 TWh.*
 
 **1. How much of the installed capacity becomes energy?** Wind farms reach a **44.7%**
 capacity factor in the windy season (Jul–Oct) against **28.7%** from January to April: the
 season almost doubles wind output (peak 49.5% in 09/2025, low 22.2% in 02/2026). Solar stays
 around **20.9%** all year.
+
+![Capacity factor by month](docs/imagens/negocio-1-aproveitamento-mensal.png)
 
 **2. Does the weather at the plants explain generation?** Yes. The empirical wind power curve
 rises from 13% at 2 m/s to 41% at 6 m/s and saturates near **50% above 11 m/s**. Correlation
@@ -103,18 +109,28 @@ with generation is **0.61** for wind at 100 m (0.39 to 0.81 depending on the sta
 for solar radiation. Temperature correlates *negatively* with wind output (−0.40): in the
 Northeast, the wind blows harder at night.
 
+![Power curves](docs/imagens/negocio-2-curvas-de-potencia.png)
+
 **3. How much forecast generation was not scheduled?** The gap between the generation the grid
 operator forecast and what it scheduled grew from **4.8%** in April to **15.6%** in September
 2026: **10.2 TWh** in six months, concentrated in the windy season. (Brazil-wide indicator:
 91% of wind capacity is in the Northeast; it is not the official curtailment measure.)
+
+![Restriction by month](docs/imagens/negocio-3-restricao-mensal.png)
+![Restriction by plant](docs/imagens/negocio-3-restricao-por-usina.png)
 
 **4. Are the forecasts accurate?** Hour by hour and plant by plant, the operator's schedule
 misses actual generation by **32%** (wind) and **40%** (solar), with almost no bias in the total.
 The day-ahead weather forecast misses wind at 100 m by **3.6 km/h** (mean wind 21 km/h) and
 temperature by **0.74 °C**.
 
+![Schedule error](docs/imagens/negocio-4-precisao-programacao.png)
+![Weather forecast error](docs/imagens/negocio-4-precisao-previsao-tempo.png)
+
 **Bonus.** Daily load in the Northeast correlates **0.51** with the capitals' temperature
 (association, not causation: season and calendar also matter), and is **7.7% lower** on weekends.
+
+![Load x temperature](docs/imagens/negocio-5-carga-x-temperatura.png)
 
 ## Project status
 
